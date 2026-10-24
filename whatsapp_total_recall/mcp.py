@@ -13,6 +13,7 @@ import urllib.parse
 from pathlib import Path
 from typing import Any
 
+from whatsapp_total_recall.config import get_default_db_path
 from whatsapp_total_recall.dag import ReplyDAG
 from whatsapp_total_recall.drafter import (
     AutonomousSendingProhibitedError,
@@ -75,14 +76,22 @@ class MCPServer:
 
     def __init__(
         self,
-        db_path: Path | str = "whatsapp_total_recall.db",
+        db_path: Path | str | None = None,
         token: str | None = None,
         token_path: Path | str | None = None,
         review_box_path: Path | str | None = None,
         llm_adapter: LLMAdapter | None = None,
         vault_path: Path | str | None = None,
     ):
-        self.db_path = Path(db_path)
+        if db_path is not None:
+            candidate = Path(db_path)
+            if str(candidate) == "whatsapp_total_recall.db" and not candidate.exists():
+                self.db_path = get_default_db_path()
+            else:
+                self.db_path = candidate
+        else:
+            self.db_path = get_default_db_path()
+
         self.review_box_path = (
             Path(review_box_path) if review_box_path else self.db_path
         )
@@ -465,7 +474,7 @@ class MCPServer:
                     "capabilities": {"tools": {}},
                     "serverInfo": {
                         "name": "whatsapp-total-recall-mcp",
-                        "version": "0.1.8",
+                        "version": "0.1.9",
                     },
                 },
             }

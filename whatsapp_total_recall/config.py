@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import contextlib
 import json
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -8,6 +10,79 @@ from typing import Any
 from whatsapp_total_recall.vault import VaultConfig
 
 DEFAULT_CONFIG_PATH = Path("config.json")
+
+
+def get_canonical_storage_dir() -> Path:
+    """Return ~/.whatsapp-total-recall directory, ensuring it exists."""
+    env_dir = os.environ.get("WHATSAPP_TOTAL_RECALL_DIR")
+    if env_dir:
+        dir_path = Path(env_dir)
+    elif "PYTEST_CURRENT_TEST" in os.environ:
+        dir_path = Path(".")
+    else:
+        dir_path = Path.home() / ".whatsapp-total-recall"
+    with contextlib.suppress(OSError):
+        dir_path.mkdir(parents=True, exist_ok=True)
+    return dir_path
+
+
+def get_default_db_path() -> Path:
+    """Resolve the default SQLite index database path.
+
+    Prioritizes:
+    1. Environment override WHATSAPP_TOTAL_RECALL_DIR / WHATSAPP_TOTAL_RECALL_DB
+    2. In pytest: local whatsapp_total_recall.db
+    3. Canonical ~/.whatsapp-total-recall/whatsapp_total_recall.db (if it exists)
+    4. Local ./whatsapp_total_recall.db / ./total_recall.db (if it exists in CWD)
+    5. Canonical ~/.whatsapp-total-recall/whatsapp_total_recall.db (default for new databases)
+    """
+    env_db = os.environ.get("WHATSAPP_TOTAL_RECALL_DB")
+    if env_db:
+        return Path(env_db)
+    env_dir = os.environ.get("WHATSAPP_TOTAL_RECALL_DIR")
+    if env_dir:
+        return Path(env_dir) / "whatsapp_total_recall.db"
+
+    if "PYTEST_CURRENT_TEST" in os.environ:
+        return Path("whatsapp_total_recall.db")
+
+    canonical = Path.home() / ".whatsapp-total-recall" / "whatsapp_total_recall.db"
+    if canonical.exists():
+        return canonical
+    for local_name in ("whatsapp_total_recall.db", "total_recall.db"):
+        local_path = Path(local_name)
+        if local_path.exists():
+            return local_path.resolve()
+    get_canonical_storage_dir()
+    return canonical
+
+
+def get_default_vault_path() -> Path:
+    """Resolve default vault config path.
+
+    Prioritizes:
+    1. Environment override WHATSAPP_TOTAL_RECALL_DIR
+    2. In pytest: local vault_config.json
+    3. Canonical ~/.whatsapp-total-recall/vault_config.json (if it exists)
+    4. Local ./vault_config.json / ./vault_perimeter.json (if in CWD)
+    5. Canonical ~/.whatsapp-total-recall/vault_config.json
+    """
+    env_dir = os.environ.get("WHATSAPP_TOTAL_RECALL_DIR")
+    if env_dir:
+        return Path(env_dir) / "vault_config.json"
+
+    if "PYTEST_CURRENT_TEST" in os.environ:
+        return Path("vault_config.json")
+
+    canonical = Path.home() / ".whatsapp-total-recall" / "vault_config.json"
+    if canonical.exists():
+        return canonical
+    for local_name in ("vault_config.json", "vault_perimeter.json"):
+        local_path = Path(local_name)
+        if local_path.exists():
+            return local_path.resolve()
+    get_canonical_storage_dir()
+    return canonical
 
 
 @dataclass
