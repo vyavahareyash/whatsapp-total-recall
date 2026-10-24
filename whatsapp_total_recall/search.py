@@ -50,7 +50,10 @@ class SearchIndex:
         embedder: EmbeddingProvider | None = None,
     ):
         self.db_path = str(db_path) if isinstance(db_path, Path) else db_path
-        self.dimension = dimension
+        if embedder is not None and (dimension == 384 or dimension is None):
+            self.dimension = embedder.dimension
+        else:
+            self.dimension = dimension
         self.embedder = embedder
         self.con = sqlite3.connect(self.db_path)
         self.con.row_factory = sqlite3.Row
@@ -75,6 +78,41 @@ class SearchIndex:
 
         if not self._sqlite_vec_available:
             self.con.create_function("cosine_dist", 2, cosine_distance)
+
+    def _ensure_vector_table_dimension(
+        self, cur: sqlite3.Cursor, target_dim: int
+    ) -> bool:
+        """Ensure the episode_vectors table matches target_dim.
+
+        If native sqlite-vec is active and the existing table's vector dimension differs,
+        recreates the table with target_dim so that model switches don't crash.
+        """
+        self.dimension = target_dim
+        if not self._sqlite_vec_available:
+            return True
+
+        cur.execute(
+            "SELECT type, sql FROM sqlite_master WHERE name = 'episode_vectors'"
+        )
+        row = cur.fetchone()
+        if row and row["sql"]:
+            m = re.search(r"float\[(\d+)\]", row["sql"])
+            if m:
+                existing_dim = int(m.group(1))
+                if existing_dim == target_dim:
+                    return True
+                # Dimension mismatch: table is float[existing_dim], incoming is float[target_dim]
+                cur.execute("DROP TABLE IF EXISTS episode_vectors")
+
+        cur.execute(
+            f"""
+            CREATE VIRTUAL TABLE IF NOT EXISTS episode_vectors USING vec0(
+                episode_id TEXT PRIMARY KEY,
+                embedding float[{target_dim}]
+            );
+            """
+        )
+        return True
 
     def _init_schema(self) -> None:
         """Create normalized messages, episodes, FTS5 virtual tables, and vector tables."""
@@ -156,16 +194,15 @@ class SearchIndex:
             "SELECT type, sql FROM sqlite_master WHERE name = 'episode_vectors'"
         )
         existing_vec = cur.fetchone()
-        if existing_vec is None:
+        if existing_vec is not None and existing_vec["sql"]:
+            m = re.search(r"float\[(\d+)\]", existing_vec["sql"])
+            if m:
+                existing_dim = int(m.group(1))
+                if self.embedder is None and self.dimension == 384:
+                    self.dimension = existing_dim
+        elif existing_vec is None:
             if self._sqlite_vec_available:
-                cur.execute(
-                    f"""
-                    CREATE VIRTUAL TABLE IF NOT EXISTS episode_vectors USING vec0(
-                        episode_id TEXT PRIMARY KEY,
-                        embedding float[{self.dimension}]
-                    );
-                    """
-                )
+                self._ensure_vector_table_dimension(cur, self.dimension)
             else:
                 cur.execute(
                     """
@@ -262,6 +299,9 @@ class SearchIndex:
         active_embedder = self._get_embedder(embedder)
 
         cur = self.con.cursor()
+        if episodes:
+            self._ensure_vector_table_dimension(cur, active_embedder.dimension)
+
         total = len(episodes)
         for idx, ep in enumerate(episodes, 1):
             msgs_payload = [
@@ -335,6 +375,8 @@ class SearchIndex:
             # Compute and store dense vector embedding
             text_to_embed = f"{ep.header}\n{ep.content}"
             vec = active_embedder.embed_text(text_to_embed)
+            if len(vec) != self.dimension:
+                self._ensure_vector_table_dimension(cur, len(vec))
             vec_bytes = struct.pack(f"{len(vec)}f", *vec)
 
             cur.execute(
@@ -514,6 +556,13 @@ class SearchIndex:
 
         cur = self.con.cursor()
         if self._sqlite_vec_available:
+            cur.execute("SELECT sql FROM sqlite_master WHERE name = 'episode_vectors'")
+            row = cur.fetchone()
+            if row and row["sql"]:
+                m = re.search(r"float\[(\d+)\]", row["sql"])
+                if m and int(m.group(1)) != len(query_vec):
+                    return []
+
             cur.execute(
                 """
                 SELECT
@@ -836,6 +885,8 @@ class SearchIndex:
                 # Re-calculate vector embedding
                 text_to_embed = f"{rebuilt.header}\n{rebuilt.content}"
                 new_vec = active_embedder.embed_text(text_to_embed)
+                if len(new_vec) != self.dimension:
+                    self._ensure_vector_table_dimension(cur, len(new_vec))
                 new_vec_bytes = struct.pack(f"{len(new_vec)}f", *new_vec)
                 cur.execute(
                     "DELETE FROM episode_vectors WHERE episode_id = ?", (ep_id,)

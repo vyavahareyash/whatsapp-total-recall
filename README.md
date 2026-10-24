@@ -58,7 +58,28 @@ WhatsApp Catalyst database files are located in `~/Library/Group Containers/grou
 
 1. Open **System Settings** > **Privacy & Security** > **Full Disk Access**.
 2. Unlock with your password or Touch ID.
-3. Toggle ON (or click **+** to add) your terminal emulator (**Terminal**, **iTerm2**, or **Ghostty**), **WhatsAppTotalRecallBar.app**, and your IDE (e.g. **Cursor**, **VS Code**).
+3. Toggle ON (or click **+** to add) your terminal emulator (**Terminal**, **iTerm2**, **Ghostty**, or **Warp**), **WhatsAppTotalRecallBar.app**, and your AI client (e.g. **Claude Desktop**, **Cursor**, **VS Code**).
+4. Verify permission in terminal:
+   ```bash
+   ls -la ~/Library/Group\ Containers/group.net.whatsapp.WhatsApp.shared/ChatStorage.sqlite
+   ```
+
+### Local Embedding Engine Setup (Ollama)
+
+To enable dense semantic vector search alongside lexical BM25 (`sqlite-vec` RRF hybrid ranking):
+
+```bash
+# 1. Install Ollama (via Homebrew or ollama.com)
+brew install ollama
+
+# 2. Pull the default 768-dim embedding model
+ollama pull nomic-embed-text
+
+# 3. Ensure Ollama service is active
+ollama serve
+```
+
+*(If Ollama is not running, WhatsApp Total Recall operates in high-speed lexical-only mode using SQLite `FTS5` BM25 without interruption).*
 
 ---
 
