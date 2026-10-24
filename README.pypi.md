@@ -124,9 +124,21 @@ claude mcp add whatsapp-total-recall -- uvx --from "whatsapp-total-recall[vec]" 
 ```
 
 ### Exposed MCP Tools
-* `search_messages`: Hybrid lexical + vector search across approved WhatsApp conversations with RRF ranking.
+* `list_chats`: Enumerate indexed conversations with JID, name, message count, and last active timestamp.
+* `search_messages`: Hybrid lexical + vector search across approved conversations (with optional `chat_id` filter).
+* `get_chat_history`: Retrieve sequential chronological message streams before/after a message ID or latest conversation turns.
 * `get_thread_context`: Reconstruct multi-turn reply DAGs and conversation branches around specific messages.
 * `stage_reply_draft`: Synthesize tone-matched reply drafts staged in the local Review Box (no autonomous sending).
+
+### Agent Skills Installation (Claude Code, Antigravity, Cursor)
+Install the official Total Recall skill to equip AI coding assistants with deep chat exploration workflows:
+```bash
+# Install to all detected agent harnesses (Claude Code, Antigravity, Cursor):
+whatsapp-total-recall install-skill
+
+# Or install to a specific agent harness:
+whatsapp-total-recall install-skill --target claude
+```
 
 ---
 

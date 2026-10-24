@@ -763,6 +763,31 @@ def build_parser() -> argparse.ArgumentParser:
         help="Compile native macOS Swift menu bar application and exit",
     )
 
+    # 13. Install Skill subcommand
+    skill_parser = subparsers.add_parser(
+        "install-skill",
+        help="Install WhatsApp Total Recall agent skill for Claude Code, Antigravity, Cursor, etc.",
+    )
+    skill_parser.add_argument(
+        "--target",
+        choices=["all", "claude", "antigravity", "cursor", "gemini", "custom"],
+        default="all",
+        help="Target AI assistant / agent environment (default: all)",
+    )
+    skill_parser.add_argument(
+        "--dest",
+        type=Path,
+        default=None,
+        help="Custom destination directory to install SKILL.md into",
+    )
+    skill_parser.add_argument(
+        "--force",
+        "-f",
+        action="store_true",
+        default=False,
+        help="Overwrite existing SKILL.md files",
+    )
+
     return parser
 
 
@@ -1889,6 +1914,102 @@ def run_ui(args: argparse.Namespace) -> int:
     return 0
 
 
+def _get_bundled_skill_content() -> str:
+    """Read the bundled SKILL.md content from package resources or fallback locations."""
+    # 1. Try importlib.resources
+    try:
+        from importlib.resources import files
+
+        skill_ref = files("whatsapp_total_recall").joinpath(
+            "skills/whatsapp-total-recall/SKILL.md"
+        )
+        if skill_ref.is_file():
+            return skill_ref.read_text(encoding="utf-8")
+    except Exception:
+        pass
+
+    # 2. Try relative to package directory
+    pkg_skill = Path(__file__).parent / "skills" / "whatsapp-total-recall" / "SKILL.md"
+    if pkg_skill.exists():
+        return pkg_skill.read_text(encoding="utf-8")
+
+    # 3. Try repo root skills/whatsapp-total-recall/SKILL.md
+    repo_skill = (
+        Path(__file__).resolve().parent.parent
+        / "skills"
+        / "whatsapp-total-recall"
+        / "SKILL.md"
+    )
+    if repo_skill.exists():
+        return repo_skill.read_text(encoding="utf-8")
+
+    raise FileNotFoundError("Bundled whatsapp-total-recall SKILL.md not found.")
+
+
+def run_install_skill(args: argparse.Namespace) -> int:
+    try:
+        content = _get_bundled_skill_content()
+    except Exception as e:
+        print(f"Error loading skill file: {e}", file=sys.stderr)
+        return 1
+
+    targets_map: dict[str, list[Path]] = {
+        "claude": [
+            Path.home() / ".claude" / "skills" / "whatsapp-total-recall" / "SKILL.md"
+        ],
+        "antigravity": [
+            Path.home()
+            / ".gemini"
+            / "config"
+            / "skills"
+            / "whatsapp-total-recall"
+            / "SKILL.md"
+        ],
+        "gemini": [
+            Path.home()
+            / ".gemini"
+            / "config"
+            / "skills"
+            / "whatsapp-total-recall"
+            / "SKILL.md"
+        ],
+        "cursor": [
+            Path.cwd() / ".cursor" / "skills" / "whatsapp-total-recall" / "SKILL.md"
+        ],
+    }
+
+    dest_paths: list[Path] = []
+    if args.dest:
+        dest_dir = Path(args.dest)
+        dest_paths.append(
+            dest_dir / "SKILL.md" if not str(dest_dir).endswith(".md") else dest_dir
+        )
+    elif args.target == "all":
+        for key in ["claude", "antigravity", "cursor"]:
+            dest_paths.extend(targets_map[key])
+    elif args.target in targets_map:
+        dest_paths.extend(targets_map[args.target])
+    else:
+        print(f"Error: Unknown target '{args.target}'", file=sys.stderr)
+        return 1
+
+    installed_count = 0
+    for path in dest_paths:
+        if path.exists() and not args.force:
+            print(f"Skipping existing skill (use --force to overwrite): {path}")
+            continue
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(content, encoding="utf-8")
+            print(f"Installed skill -> {path}")
+            installed_count += 1
+        except Exception as e:
+            print(f"Failed to install to {path}: {e}", file=sys.stderr)
+
+    print(f"Successfully installed skill to {installed_count} location(s).")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -1928,6 +2049,8 @@ def main(argv: list[str] | None = None) -> int:
         return run_mcp(args)
     if args.command == "ui":
         return run_ui(args)
+    if args.command == "install-skill":
+        return run_install_skill(args)
     return 0
 
 

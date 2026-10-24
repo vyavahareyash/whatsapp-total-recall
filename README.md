@@ -246,10 +246,19 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 
 #### Exposed MCP Tools
 
-Once connected, your AI assistant gains access to three privacy-scoped tools:
-* `search_messages`: Hybrid lexical + vector search over approved chats with RRF ranking.
+Once connected, your AI assistant gains access to five privacy-scoped tools:
+* `list_chats`: Enumerate indexed conversations with JID, name, message count, and last active timestamp.
+* `search_messages`: Hybrid lexical + vector search over approved chats with RRF ranking (with optional `chat_id` filter).
+* `get_chat_history`: Retrieve sequential chronological message streams before/after a message ID or latest conversation turns.
 * `get_thread_context`: Reconstruct reply DAGs and episode context around specific message IDs.
 * `stage_reply_draft`: Create tone-matched drafts staged in the local Review Box (no autonomous sending).
+
+#### Agent Skills Installation (Claude Code, Antigravity, Cursor)
+
+Install the bundled agent exploration skill across your local agent harnesses:
+```bash
+whatsapp-total-recall install-skill
+```
 
 #### SSE Transport for Web / Network Agents
 
