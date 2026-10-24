@@ -9,7 +9,12 @@ from whatsapp_total_recall.chunking import (
     GROUP_BURST_GAP_SECONDS,
     chunk_into_episodes,
 )
-from whatsapp_total_recall.config import DEFAULT_CONFIG_PATH, AppConfig
+from whatsapp_total_recall.config import (
+    DEFAULT_CONFIG_PATH,
+    AppConfig,
+    get_default_db_path,
+    get_default_vault_path,
+)
 from whatsapp_total_recall.dag import ReplyDAG
 from whatsapp_total_recall.discovery import discover_whatsapp_containers
 from whatsapp_total_recall.drafter import (
@@ -1887,6 +1892,19 @@ def run_ui(args: argparse.Namespace) -> int:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+
+    if (
+        hasattr(args, "db")
+        and args.db == DEFAULT_DB_PATH
+        and not DEFAULT_DB_PATH.exists()
+    ):
+        args.db = get_default_db_path()
+    if (
+        hasattr(args, "vault")
+        and args.vault == DEFAULT_VAULT_PATH
+        and not DEFAULT_VAULT_PATH.exists()
+    ):
+        args.vault = get_default_vault_path()
 
     if args.command == "ingest":
         return run_ingest(args)

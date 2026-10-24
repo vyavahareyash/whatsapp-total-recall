@@ -507,7 +507,7 @@ wheels = [
 
 [[package]]
 name = "whatsapp-total-recall"
-version = "0.1.7"
+version = "0.1.9"
 source = { editable = "." }
 
 [package.optional-dependencies]

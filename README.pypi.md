@@ -82,8 +82,6 @@ pipx install "whatsapp-total-recall[vec]"
 pip install "whatsapp-total-recall[vec]"
 ```
 
-*Note: Both `whatsapp-total-recall` and `total-recall` executable commands are provided.*
-
 ---
 
 ## Model Context Protocol (MCP) Integration

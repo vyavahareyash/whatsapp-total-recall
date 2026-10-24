@@ -30,7 +30,7 @@ Every release must audit and synchronize documentation across two distinct scope
 ### A. Scoped PyPI README (`README.pypi.md`)
 PyPI should reflect only the Python package, CLI, and MCP server:
 - **Zero Relative Links**: All links to code, docs, or issues must use absolute GitHub URLs (`https://github.com/vyavahareyash/whatsapp-total-recall/...`).
-- **CLI Command Syntax**: Verify both `whatsapp-total-recall` and `total-recall` commands and new subcommands (e.g. `vault approve --all`, `vault revoke --all`) are documented.
+- **CLI Command Syntax**: Verify `whatsapp-total-recall` command and new subcommands (e.g. `vault approve --all`, `vault revoke --all`) are documented.
 - **MCP Client Blocks**: Verify JSON snippet blocks for:
   - Claude Desktop (`~/Library/Application Support/Claude/claude_desktop_config.json`)
   - Cursor / Windsurf (`.cursor/mcp.json`)

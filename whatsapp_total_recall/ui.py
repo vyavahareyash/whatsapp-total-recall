@@ -12,7 +12,11 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
-from whatsapp_total_recall.config import AppConfig
+from whatsapp_total_recall.config import (
+    AppConfig,
+    get_default_db_path,
+    get_default_vault_path,
+)
 from whatsapp_total_recall.dag import ReplyDAG
 from whatsapp_total_recall.discovery import discover_whatsapp_containers
 from whatsapp_total_recall.drafter import DraftReviewBox, ReplyDrafter
@@ -790,9 +794,9 @@ def build_native_menu_bar_app(
 
 
 def run_ui_server(
-    db_path: Path = Path("whatsapp_total_recall.db"),
-    vault_path: Path = Path("vault_config.json"),
-    review_box_path: Path = Path("whatsapp_total_recall.db"),
+    db_path: Path | None = None,
+    vault_path: Path | None = None,
+    review_box_path: Path | None = None,
     config: AppConfig | None = None,
     host: str = "127.0.0.1",
     port: int = 8765,
@@ -803,10 +807,14 @@ def run_ui_server(
     """Initialize and start the local Total Recall UI server."""
     validate_loopback_host(host)
 
+    target_db = db_path if db_path is not None else get_default_db_path()
+    target_vault = vault_path if vault_path is not None else get_default_vault_path()
+    target_review = review_box_path if review_box_path is not None else target_db
+
     context = UIServerContext(
-        db_path=db_path,
-        vault_path=vault_path,
-        review_box_path=review_box_path,
+        db_path=target_db,
+        vault_path=target_vault,
+        review_box_path=target_review,
         config=config,
         llm_adapter=llm_adapter,
     )
