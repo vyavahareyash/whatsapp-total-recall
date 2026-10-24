@@ -49,7 +49,7 @@ The system is engineered around four deep modules with minimal interfaces and hi
 * **Operating System:** macOS 12.0+ (Apple Silicon or Intel).
 * **WhatsApp Desktop:** Official macOS desktop application (Catalyst build) installed and active.
 * **Full Disk Access:** Terminal / Python / IDE granted Full Disk Access in macOS to read WhatsApp's App Group container.
-* **Python Runtime:** Python 3.13+ (if installing via CLI/uv/pip).
+* **Python Runtime:** Python 3.11+ (if installing via CLI/uv/pip).
 * **Local Inference (Optional):** [Ollama](https://ollama.com/) running locally for vector embeddings (`nomic-embed-text`) and summarization models (`qwen2.5:7b` / `llama3.2:3b`).
 
 ### Granting macOS Full Disk Access
