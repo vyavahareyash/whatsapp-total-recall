@@ -111,9 +111,34 @@ class MCPServer:
         """Return registered tool schemas. Autonomous send and presence tracking are stripped/omitted."""
         return [
             {
+                "name": "list_chats",
+                "description": (
+                    "List indexed WhatsApp conversations with contact/group name, JID, message count, "
+                    "and last activity timestamp. Use as step 1 in chat exploration to discover available "
+                    "conversations, resolve JIDs, or find specific people/groups."
+                ),
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "query": {
+                            "type": "string",
+                            "description": "Optional search term to filter chat names or JIDs.",
+                        },
+                        "limit": {
+                            "type": "integer",
+                            "description": "Maximum number of chats to return (default: 20, max: 100).",
+                            "default": 20,
+                        },
+                    },
+                },
+            },
+            {
                 "name": "search_messages",
                 "description": (
-                    "Search indexed WhatsApp messages using local full-text BM25 retrieval."
+                    "Search indexed WhatsApp messages using local full-text BM25 retrieval. "
+                    "Returns matching message PKs, senders, timestamps, and text. Use this to locate key anchor "
+                    "messages or keywords. You can optionally scope the search to a specific chat_id. "
+                    "Follow up with get_chat_history to read chronological context around matching messages."
                 ),
                 "inputSchema": {
                     "type": "object",
@@ -122,9 +147,13 @@ class MCPServer:
                             "type": "string",
                             "description": "Search query terms or keywords.",
                         },
+                        "chat_id": {
+                            "type": "string",
+                            "description": "Optional chat JID to scope search strictly within one conversation.",
+                        },
                         "limit": {
                             "type": "integer",
-                            "description": "Maximum number of messages to return (default: 10).",
+                            "description": "Maximum number of messages to return (default: 10, max: 100).",
                             "default": 10,
                         },
                     },
@@ -132,9 +161,39 @@ class MCPServer:
                 },
             },
             {
+                "name": "get_chat_history",
+                "description": (
+                    "Retrieve a sequential chronological message stream for a specific chat. "
+                    "Pass around_message_id to expand context before and after a search hit, or omit it to fetch "
+                    "the most recent messages. Unlike get_thread_context (which only traces quoted reply DAGs), "
+                    "get_chat_history reveals natural, unquoted back-and-forth dialogue, agreements, and context."
+                ),
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "chat_id": {
+                            "type": "string",
+                            "description": "The target chat JID.",
+                        },
+                        "around_message_id": {
+                            "type": "integer",
+                            "description": "Optional message primary key ID. If provided, fetches a chronological window centered on this message.",
+                        },
+                        "limit": {
+                            "type": "integer",
+                            "description": "Maximum number of chronological messages to return (default: 20, max: 100).",
+                            "default": 20,
+                        },
+                    },
+                    "required": ["chat_id"],
+                },
+            },
+            {
                 "name": "get_thread_context",
                 "description": (
-                    "Retrieve full reply thread DAG context and hierarchy for a given message ID."
+                    "Retrieve the full parent-child reply DAG (Directed Acyclic Graph) for a given message ID. "
+                    "Traces quoted reply roots, branches, and discussion hierarchies. Use when a message references "
+                    "an earlier comment via WhatsApp's quote-reply feature or during complex multi-turn group debates."
                 ),
                 "inputSchema": {
                     "type": "object",
@@ -151,7 +210,7 @@ class MCPServer:
                 "name": "stage_reply_draft",
                 "description": (
                     "Synthesize and stage an intent-constrained reply draft matching user's historical tone. "
-                    "Drafts are staged strictly in the review box for manual human approval. Autonomous sending is prohibited."
+                    "Drafts are staged strictly in the local review box for manual human approval. Autonomous sending is prohibited."
                 ),
                 "inputSchema": {
                     "type": "object",
@@ -205,10 +264,25 @@ class MCPServer:
             }
 
         try:
-            if name == "search_messages":
+            if name == "list_chats":
                 query = str(arguments.get("query", "")).strip()
+                limit = int(arguments.get("limit", 20))
+                return self._tool_list_chats(query, limit)
+            elif name == "search_messages":
+                query = str(arguments.get("query", "")).strip()
+                chat_id = arguments.get("chat_id")
                 limit = int(arguments.get("limit", 10))
-                return self._tool_search_messages(query, limit)
+                return self._tool_search_messages(query, limit, chat_id=chat_id)
+            elif name == "get_chat_history":
+                if "chat_id" not in arguments:
+                    raise ValueError("Argument 'chat_id' is required.")
+                chat_id = str(arguments["chat_id"]).strip()
+                around_id = arguments.get("around_message_id")
+                around_message_id = int(around_id) if around_id is not None else None
+                limit = int(arguments.get("limit", 20))
+                return self._tool_get_chat_history(
+                    chat_id, around_message_id=around_message_id, limit=limit
+                )
             elif name == "get_thread_context":
                 if "message_id" not in arguments:
                     raise ValueError("Argument 'message_id' is required.")
@@ -236,7 +310,78 @@ class MCPServer:
                 "isError": True,
             }
 
-    def _tool_search_messages(self, query: str, limit: int) -> dict[str, Any]:
+    def _tool_list_chats(self, query: str = "", limit: int = 20) -> dict[str, Any]:
+        limit = max(1, min(limit, 100))
+        if not self.db_path.exists():
+            return {
+                "content": [
+                    {
+                        "type": "text",
+                        "text": json.dumps(
+                            {"error": f"Database '{self.db_path}' not found."}
+                        ),
+                    }
+                ],
+                "isError": True,
+            }
+
+        with SearchIndex(self.db_path) as index:
+            cur = index.con.cursor()
+            cur.execute(
+                """
+                SELECT
+                    m.chat_jid,
+                    coalesce(
+                        (SELECT chat_name FROM episodes WHERE chat_jid = m.chat_jid AND chat_name IS NOT NULL AND chat_name != '' LIMIT 1),
+                        (SELECT sender_name FROM messages WHERE chat_jid = m.chat_jid AND sender_name IS NOT NULL AND is_from_me = 0 ORDER BY unix_timestamp DESC LIMIT 1),
+                        m.chat_jid
+                    ) AS chat_name,
+                    count(m.pk) AS message_count,
+                    max(m.unix_timestamp) AS last_timestamp,
+                    max(m.iso_date) AS last_iso_date
+                FROM messages m
+                GROUP BY m.chat_jid
+                ORDER BY last_timestamp DESC
+                """
+            )
+            rows = cur.fetchall()
+
+            vault = self._get_vault_config()
+            chats = []
+            for r in rows:
+                chat_jid = str(r["chat_jid"])
+                if vault is not None and not vault.is_chat_approved(chat_jid):
+                    continue
+                name = str(r["chat_name"])
+                if query:
+                    q_lower = query.lower()
+                    if q_lower not in chat_jid.lower() and q_lower not in name.lower():
+                        continue
+                chats.append(
+                    {
+                        "chat_jid": chat_jid,
+                        "chat_name": name,
+                        "is_group": "@g.us" in chat_jid,
+                        "message_count": int(r["message_count"]),
+                        "last_active": str(r["last_iso_date"]),
+                    }
+                )
+                if len(chats) >= limit:
+                    break
+
+            return {
+                "content": [
+                    {
+                        "type": "text",
+                        "text": json.dumps(chats, indent=2, ensure_ascii=False),
+                    }
+                ],
+                "isError": False,
+            }
+
+    def _tool_search_messages(
+        self, query: str, limit: int, chat_id: str | None = None
+    ) -> dict[str, Any]:
         if not query:
             return {
                 "content": [{"type": "text", "text": json.dumps([])}],
@@ -257,10 +402,13 @@ class MCPServer:
             }
 
         with SearchIndex(self.db_path) as index:
-            results = index.search(query=query, limit=max(limit * 3, 30))
+            results = index.search(query=query, limit=max(limit * 5, 50))
             vault = self._get_vault_config()
             if vault is not None:
                 results = [r for r in results if vault.is_chat_approved(r.chat_jid)]
+            if chat_id:
+                clean_chat = chat_id.strip()
+                results = [r for r in results if r.chat_jid == clean_chat]
             results = results[:limit]
             data = [
                 {
@@ -278,6 +426,158 @@ class MCPServer:
                     {
                         "type": "text",
                         "text": json.dumps(data, indent=2, ensure_ascii=False),
+                    }
+                ],
+                "isError": False,
+            }
+
+    def _tool_get_chat_history(
+        self,
+        chat_id: str,
+        around_message_id: int | None = None,
+        limit: int = 20,
+    ) -> dict[str, Any]:
+        limit = max(1, min(limit, 100))
+        if not self.db_path.exists():
+            return {
+                "content": [
+                    {
+                        "type": "text",
+                        "text": json.dumps(
+                            {"error": f"Database '{self.db_path}' not found."}
+                        ),
+                    }
+                ],
+                "isError": True,
+            }
+
+        vault = self._get_vault_config()
+        if vault is not None and not vault.is_chat_approved(chat_id):
+            return {
+                "content": [
+                    {
+                        "type": "text",
+                        "text": json.dumps(
+                            {
+                                "error": f"Chat '{chat_id}' is not approved in Opt-In Chat Vault."
+                            }
+                        ),
+                    }
+                ],
+                "isError": True,
+            }
+
+        with SearchIndex(self.db_path) as index:
+            cur = index.con.cursor()
+            if around_message_id is not None:
+                target = index.get_message(around_message_id)
+                if not target:
+                    return {
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": json.dumps(
+                                    {
+                                        "error": f"Message #{around_message_id} not found."
+                                    }
+                                ),
+                            }
+                        ],
+                        "isError": True,
+                    }
+                if target.chat_jid != chat_id:
+                    chat_id = target.chat_jid
+                    if vault is not None and not vault.is_chat_approved(chat_id):
+                        return {
+                            "content": [
+                                {
+                                    "type": "text",
+                                    "text": json.dumps(
+                                        {
+                                            "error": f"Chat '{chat_id}' is not approved in Opt-In Chat Vault."
+                                        }
+                                    ),
+                                }
+                            ],
+                            "isError": True,
+                        }
+
+                half = limit // 2
+                cur.execute(
+                    """
+                    SELECT * FROM messages
+                    WHERE chat_jid = ? AND (unix_timestamp < ? OR (unix_timestamp = ? AND pk < ?))
+                    ORDER BY unix_timestamp DESC, pk DESC
+                    LIMIT ?
+                    """,
+                    (
+                        chat_id,
+                        target.unix_timestamp,
+                        target.unix_timestamp,
+                        target.pk,
+                        half,
+                    ),
+                )
+                before_rows = cur.fetchall()
+                before_msgs = [
+                    index._row_to_normalized_message(r) for r in reversed(before_rows)
+                ]
+
+                cur.execute(
+                    """
+                    SELECT * FROM messages
+                    WHERE chat_jid = ? AND (unix_timestamp > ? OR (unix_timestamp = ? AND pk >= ?))
+                    ORDER BY unix_timestamp ASC, pk ASC
+                    LIMIT ?
+                    """,
+                    (
+                        chat_id,
+                        target.unix_timestamp,
+                        target.unix_timestamp,
+                        target.pk,
+                        limit - len(before_msgs),
+                    ),
+                )
+                after_rows = cur.fetchall()
+                after_msgs = [index._row_to_normalized_message(r) for r in after_rows]
+                messages = before_msgs + after_msgs
+            else:
+                cur.execute(
+                    """
+                    SELECT * FROM messages
+                    WHERE chat_jid = ?
+                    ORDER BY unix_timestamp DESC, pk DESC
+                    LIMIT ?
+                    """,
+                    (chat_id, limit),
+                )
+                rows = cur.fetchall()
+                messages = [index._row_to_normalized_message(r) for r in reversed(rows)]
+
+            payload = {
+                "chat_jid": chat_id,
+                "message_count": len(messages),
+                "target_message_id": around_message_id,
+                "messages": [
+                    {
+                        "pk": m.pk,
+                        "sender_name": m.sender_name,
+                        "is_from_me": m.is_from_me,
+                        "parent_pk": m.parent_pk,
+                        "iso_date": m.iso_date,
+                        "text": m.text,
+                        "is_target": (m.pk == around_message_id)
+                        if around_message_id is not None
+                        else False,
+                    }
+                    for m in messages
+                ],
+            }
+            return {
+                "content": [
+                    {
+                        "type": "text",
+                        "text": json.dumps(payload, indent=2, ensure_ascii=False),
                     }
                 ],
                 "isError": False,
@@ -474,7 +774,7 @@ class MCPServer:
                     "capabilities": {"tools": {}},
                     "serverInfo": {
                         "name": "whatsapp-total-recall-mcp",
-                        "version": "0.1.9",
+                        "version": "0.2.0",
                     },
                 },
             }

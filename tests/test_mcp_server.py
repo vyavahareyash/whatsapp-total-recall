@@ -157,11 +157,13 @@ def test_prohibited_tools_omitted_and_rejected(tmp_path: Path):
     db_path = tmp_path / "test.db"
     server = MCPServer(db_path=db_path, token="secret-token")
 
-    # tools/list must ONLY contain the 3 sanctioned tools
+    # tools/list must contain the sanctioned safe tools
     tools = server.get_tool_definitions()
     tool_names = [t["name"] for t in tools]
     assert set(tool_names) == {
+        "list_chats",
         "search_messages",
+        "get_chat_history",
         "get_thread_context",
         "stage_reply_draft",
     }
@@ -318,7 +320,7 @@ def test_stdio_tool_invocations(tmp_path: Path):
 
     # 1. tools/list check
     tools_list = outputs[0]["result"]["tools"]
-    assert len(tools_list) == 3
+    assert len(tools_list) == 5
 
     # 2. search_messages check
     search_res = json.loads(outputs[1]["result"]["content"][0]["text"])
@@ -619,3 +621,62 @@ def test_mcp_server_vault_filter_enforcement(tmp_path: Path):
     assert search_resp2["result"]["isError"] is False
     search_data2 = json.loads(search_resp2["result"]["content"][0]["text"])
     assert len(search_data2) >= 1
+
+
+def test_list_chats_and_chat_history_tools(tmp_path: Path):
+    db_path = tmp_path / "test.db"
+    seed_test_database(db_path)
+
+    server = MCPServer(db_path=db_path, token="secret-token")
+
+    # 1. list_chats
+    res = server.execute_tool("list_chats", {"limit": 10})
+    assert res["isError"] is False
+    chats = json.loads(res["content"][0]["text"])
+    assert len(chats) == 2
+    jids = {c["chat_jid"] for c in chats}
+    assert "12345@g.us" in jids
+    assert "direct@s.whatsapp.net" in jids
+
+    # Test filtering by query
+    res_q = server.execute_tool("list_chats", {"query": "12345"})
+    assert res_q["isError"] is False
+    chats_q = json.loads(res_q["content"][0]["text"])
+    assert len(chats_q) == 1
+    assert chats_q[0]["chat_jid"] == "12345@g.us"
+    assert chats_q[0]["is_group"] is True
+
+    # 2. get_chat_history without anchor (latest messages)
+    hist_latest = server.execute_tool(
+        "get_chat_history", {"chat_id": "12345@g.us", "limit": 3}
+    )
+    assert hist_latest["isError"] is False
+    data_latest = json.loads(hist_latest["content"][0]["text"])
+    assert data_latest["chat_jid"] == "12345@g.us"
+    assert data_latest["message_count"] == 3
+    # Chronological order
+    pks = [m["pk"] for m in data_latest["messages"]]
+    assert pks == [2, 3, 4]
+
+    # 3. get_chat_history with around_message_id
+    hist_around = server.execute_tool(
+        "get_chat_history",
+        {"chat_id": "12345@g.us", "around_message_id": 2, "limit": 4},
+    )
+    assert hist_around["isError"] is False
+    data_around = json.loads(hist_around["content"][0]["text"])
+    assert data_around["target_message_id"] == 2
+    around_pks = [m["pk"] for m in data_around["messages"]]
+    assert 2 in around_pks
+    # target flag set
+    target_msg = next(m for m in data_around["messages"] if m["pk"] == 2)
+    assert target_msg["is_target"] is True
+
+    # 4. search_messages scoped by chat_id
+    search_scoped = server.execute_tool(
+        "search_messages",
+        {"query": "You", "chat_id": "direct@s.whatsapp.net"},
+    )
+    assert search_scoped["isError"] is False
+    data_scoped = json.loads(search_scoped["content"][0]["text"])
+    assert all(r["chat_jid"] == "direct@s.whatsapp.net" for r in data_scoped)
