@@ -24,14 +24,46 @@ Installing `whatsapp-total-recall` via `pip`, `pipx`, or `uv` provides:
 
 ---
 
-## Prerequisites (macOS Full Disk Access)
+## Prerequisites: Granting macOS Full Disk Access
 
-WhatsApp on macOS stores messages in an App Group container:
-`~/Library/Group Containers/group.net.whatsapp.WhatsApp.shared/ChatStorage.sqlite`
+WhatsApp on macOS stores its SQLite message database in a protected App Group sandbox:
+```text
+~/Library/Group Containers/group.net.whatsapp.WhatsApp.shared/ChatStorage.sqlite
+```
 
-Reading this local container requires granting macOS **Full Disk Access**:
-1. Open **System Settings** > **Privacy & Security** > **Full Disk Access**.
-2. Toggle ON your terminal emulator (**Terminal**, **iTerm2**, **Ghostty**) and/or your AI client (**Claude Desktop**, **Cursor**).
+Because macOS restricts access to group containers by default, you must grant **Full Disk Access**:
+
+1. Open macOS **System Settings** > **Privacy & Security** > **Full Disk Access**.
+2. Click the **`+`** icon (or toggle **ON**) for:
+   - Your Terminal app (**Terminal**, **iTerm2**, **Ghostty**, **Warp**).
+   - Your AI desktop client if running MCP stdio (**Claude Desktop**, **Cursor**, **Windsurf**).
+3. **Verify permission via CLI:**
+   ```bash
+   ls -la ~/Library/Group\ Containers/group.net.whatsapp.WhatsApp.shared/ChatStorage.sqlite
+   ```
+   *If the command prints file details, permission is active. If you see `Operation not permitted`, restart your terminal application.*
+
+---
+
+## Local Embeddings Requirement (Ollama)
+
+WhatsApp Total Recall powers hybrid search (RRF) by combining lexical BM25 (`FTS5`) with dense vector embeddings (`sqlite-vec`, 768-dim):
+
+1. **Install Ollama** (if not already installed):
+   ```bash
+   brew install ollama
+   ```
+   *(Or download installer from [ollama.com](https://ollama.com)).*
+
+2. **Pull the default local embedding model:**
+   ```bash
+   ollama pull nomic-embed-text
+   ```
+
+3. Ensure Ollama is running in the background (`ollama serve` or Ollama app).
+
+> [!NOTE]
+> **Graceful Fallback:** If Ollama is unavailable, WhatsApp Total Recall automatically runs in fast lexical-only mode using SQLite `FTS5` BM25 keyword search without crashing.
 
 ---
 

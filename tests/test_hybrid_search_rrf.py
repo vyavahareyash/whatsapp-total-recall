@@ -478,6 +478,40 @@ def test_cli_search_hybrid_and_lexical(tmp_path: Path):
     assert "Project Titan roadmap" in ep_out
 
 
+def test_dimension_reconciliation_384_to_768_model_switch():
+    """Verify switching embedder dimensions (e.g. 384 default to 768 Ollama) does not raise sqlite3.OperationalError."""
+    chat_jid = "120363041234567890@g.us"
+    m1 = NormalizedMessage(
+        pk=1,
+        chat_session_id=1,
+        chat_jid=chat_jid,
+        stanza_id="s1",
+        is_from_me=False,
+        sender_name="Alice",
+        sender_jid="alice@s.whatsapp.net",
+        apple_date=700000000.0,
+        unix_timestamp=1672531200.0,
+        iso_date="2023-01-01 00:00:00 UTC",
+        text="Switching models should not crash",
+    )
+    episodes = chunk_into_episodes([m1], {chat_jid: "Group"})
+
+    # 1. Initialize index with 384 dimensions and mock embedder
+    embedder_384 = DeterministicMockEmbeddingProvider(dim=384)
+    with SearchIndex(":memory:", dimension=384, embedder=embedder_384) as index:
+        index.index_episodes(episodes, embedder=embedder_384)
+        assert index.dimension == 384
+
+        # 2. Now switch to 768-dim embedder (e.g. Ollama nomic-embed-text)
+        embedder_768 = DeterministicMockEmbeddingProvider(dim=768)
+        index.index_episodes(episodes, embedder=embedder_768)
+        assert index.dimension == 768
+
+        # 3. Vector search with 768-dim query succeeds
+        scored = index.search_episodes_vector("models", limit=5, embedder=embedder_768)
+        assert len(scored) == 1
+
+
 def is_ollama_available() -> bool:
     import urllib.request
 
