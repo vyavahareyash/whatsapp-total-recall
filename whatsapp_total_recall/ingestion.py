@@ -577,13 +577,25 @@ class IngestionEngine:
         direct_gap_seconds: float | None = None,
         incremental: bool = True,
         chat_jid: str | None = None,
+        progress_callback: Callable[[str, int, int], None] | None = None,
     ) -> tuple[list[ConversationalFlowEpisode], IngestionReport]:
         """Synchronize WhatsApp store using Opt-In Chat Vault perimeter, incremental sync_state, and return episodes & report."""
         rev_count = 0
         exp_count = 0
         if index is not None:
             rev_reps, exp_reps = self.purge_revocations_and_expired(
-                index=index, current_timestamp=current_timestamp, embedder=embedder
+                index=index,
+                current_timestamp=current_timestamp,
+                embedder=embedder,
+                progress_callback=(
+                    (
+                        lambda cur, tot: progress_callback(
+                            "Purging revocations", cur, tot
+                        )
+                    )
+                    if progress_callback
+                    else None
+                ),
             )
             rev_count = len(rev_reps)
             exp_count = len(exp_reps)
@@ -639,12 +651,32 @@ class IngestionEngine:
 
         if index is not None:
             if messages:
-                index.index_messages(messages)
+                index.index_messages(
+                    messages,
+                    progress_callback=(
+                        (
+                            lambda cur, tot: progress_callback(
+                                "Indexing messages", cur, tot
+                            )
+                        )
+                        if progress_callback
+                        else None
+                    ),
+                )
             if episodes:
                 index.index_episodes(
                     episodes,
                     index_constituent_messages=False,
                     embedder=embedder,
+                    progress_callback=(
+                        (
+                            lambda cur, tot: progress_callback(
+                                "Embedding & indexing episodes", cur, tot
+                            )
+                        )
+                        if progress_callback
+                        else None
+                    ),
                 )
             chat_msg_map: dict[str, list[NormalizedMessage]] = {}
             for m in messages:

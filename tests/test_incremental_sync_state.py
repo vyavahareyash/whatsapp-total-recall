@@ -247,3 +247,30 @@ def test_cli_sync_subcommand(synthetic_sync_db: tuple[Path, Path], tmp_path: Pat
             state = index.get_sync_state("14155550101@s.whatsapp.net")
             assert state is not None
             assert state["last_message_pk"] == 2
+
+
+def test_sync_progress_callback_stages(
+    synthetic_sync_db: tuple[Path, Path], tmp_path: Path
+):
+    chat_storage, contacts = synthetic_sync_db
+    index_db = tmp_path / "cb_test.db"
+    vault = VaultConfig()
+    vault.approve("14155550101@s.whatsapp.net")
+
+    engine = IngestionEngine(chat_storage, contacts)
+    stages_seen: list[str] = []
+
+    def on_progress(stage: str, cur: int, tot: int) -> None:
+        if stage not in stages_seen:
+            stages_seen.append(stage)
+
+    with SearchIndex(index_db) as index:
+        engine.sync(
+            vault_config=vault,
+            index=index,
+            incremental=True,
+            progress_callback=on_progress,
+        )
+
+    assert "Indexing messages" in stages_seen
+    assert "Embedding & indexing episodes" in stages_seen
