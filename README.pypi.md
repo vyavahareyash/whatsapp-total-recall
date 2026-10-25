@@ -5,6 +5,7 @@
 [![PyPI](https://img.shields.io/pypi/v/whatsapp-total-recall)](https://pypi.org/project/whatsapp-total-recall/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/vyavahareyash/whatsapp-total-recall/blob/main/LICENSE)
 [![GitHub Release](https://img.shields.io/github/v/release/vyavahareyash/whatsapp-total-recall)](https://github.com/vyavahareyash/whatsapp-total-recall/releases)
+[![Buy Me A Coffee](https://img.shields.io/badge/Sponsor-Buy%20Me%20a%20Coffee-FFDD00?logo=buy-me-a-coffee&logoColor=black)](https://buymeacoffee.com/vyavahareyash)
 
 WhatsApp Total Recall is an edge-native conversational intelligence platform and Model Context Protocol (MCP) server for macOS. It passively reads local WhatsApp Catalyst SQLite archives (`ChatStorage.sqlite`) with **zero cloud egress, zero network traffic, and zero account ban risk**.
 
