@@ -235,6 +235,8 @@ class IngestionEngine:
         include_direct: bool = True,
         include_groups: bool = True,
         vault_config: VaultConfig | None = None,
+        since_apple_dates: dict[str, float] | None = None,
+        chat_jid: str | None = None,
     ) -> tuple[list[NormalizedMessage], IngestionStats]:
         """Extract and normalize chat messages with lock-free snapshot reads and vault filtering."""
         if not include_direct and not include_groups:
@@ -270,6 +272,24 @@ class IngestionEngine:
         # Construct WHERE clause based on session inclusion
         where_conditions = ["m.ZTEXT IS NOT NULL", "length(m.ZTEXT) > 0"]
         query_params: list[Any] = []
+        if chat_jid:
+            where_conditions.append("s.ZCONTACTJID = ?")
+            query_params.append(chat_jid)
+            if since_apple_dates and chat_jid in since_apple_dates:
+                where_conditions.append("m.ZMESSAGEDATE > ?")
+                query_params.append(since_apple_dates[chat_jid])
+        elif (
+            vault_config
+            and vault_config.approved_chat_jids
+            and since_apple_dates
+            and all(j in since_apple_dates for j in vault_config.approved_chat_jids)
+        ):
+            min_apple = min(
+                since_apple_dates[j] for j in vault_config.approved_chat_jids
+            )
+            where_conditions.append("m.ZMESSAGEDATE > ?")
+            query_params.append(min_apple)
+
         if include_direct and not include_groups:
             # If vault_config explicitly approved group chats, allow them through
             approved_groups = (
@@ -375,6 +395,13 @@ class IngestionEngine:
                 )
 
             apple_date = float(row["ZMESSAGEDATE"])
+            if (
+                since_apple_dates
+                and chat_jid in since_apple_dates
+                and apple_date <= since_apple_dates[chat_jid]
+            ):
+                continue
+
             unix_ts = apple_epoch_to_unix(apple_date)
             iso_str = format_iso_timestamp(unix_ts)
             parent_pk = (
@@ -548,8 +575,10 @@ class IngestionEngine:
         current_timestamp: float | None = None,
         group_gap_seconds: float | None = None,
         direct_gap_seconds: float | None = None,
+        incremental: bool = True,
+        chat_jid: str | None = None,
     ) -> tuple[list[ConversationalFlowEpisode], IngestionReport]:
-        """Synchronize WhatsApp store using Opt-In Chat Vault perimeter and return episodes & report."""
+        """Synchronize WhatsApp store using Opt-In Chat Vault perimeter, incremental sync_state, and return episodes & report."""
         rev_count = 0
         exp_count = 0
         if index is not None:
@@ -559,9 +588,23 @@ class IngestionEngine:
             rev_count = len(rev_reps)
             exp_count = len(exp_reps)
 
+        since_apple_dates: dict[str, float] | None = None
+        if incremental and index is not None:
+            sync_states = index.get_sync_state()
+            if isinstance(sync_states, dict):
+                since_apple_dates = {
+                    jid: float(rec["last_apple_date"])
+                    for jid, rec in sync_states.items()
+                    if "last_apple_date" in rec
+                }
+
         report = self.discover_chats(vault_config=vault_config)
         messages, _ = self.extract_messages(
-            include_direct=True, include_groups=True, vault_config=vault_config
+            include_direct=True,
+            include_groups=True,
+            vault_config=vault_config,
+            since_apple_dates=since_apple_dates,
+            chat_jid=chat_jid,
         )
 
         chat_names = {c.chat_jid: c.chat_name for c in report.chats}
@@ -590,9 +633,32 @@ class IngestionEngine:
                 group_gap_seconds=grp_gap,
                 direct_gap_seconds=dir_gap,
             )
-            if chunk_episodes
+            if chunk_episodes and messages
             else []
         )
+
+        if index is not None:
+            if messages:
+                index.index_messages(messages)
+            if episodes:
+                index.index_episodes(
+                    episodes,
+                    index_constituent_messages=False,
+                    embedder=embedder,
+                )
+            chat_msg_map: dict[str, list[NormalizedMessage]] = {}
+            for m in messages:
+                chat_msg_map.setdefault(m.chat_jid, []).append(m)
+
+            for jid, msgs in chat_msg_map.items():
+                last_m = max(msgs, key=lambda m: (m.apple_date, m.pk))
+                index.update_sync_state(
+                    chat_jid=jid,
+                    last_message_pk=last_m.pk,
+                    last_apple_date=last_m.apple_date,
+                    last_unix_timestamp=last_m.unix_timestamp,
+                    synced_count=len(msgs),
+                )
 
         ingested_jids = {m.chat_jid for m in messages}
         final_report = IngestionReport(

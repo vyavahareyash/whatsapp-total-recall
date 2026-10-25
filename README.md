@@ -224,6 +224,21 @@ whatsapp-total-recall ingest --include-groups
 whatsapp-total-recall ingest --all --include-groups
 ```
 
+### 2b. Incrementally Sync Messages
+
+After initial ingestion, update your local index with new messages without re-indexing your entire archive:
+
+```bash
+# Incrementally sync new messages across approved chats (using sync_state high-water marks)
+whatsapp-total-recall sync
+
+# Sync a specific conversation only
+whatsapp-total-recall sync --chat <jid>
+
+# Force a full backfill re-sync
+whatsapp-total-recall sync --force
+```
+
 ### 3. Search Conversations
 
 Perform hybrid BM25 + vector search fused with Reciprocal Rank Fusion (RRF):
@@ -261,13 +276,14 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 
 #### Exposed MCP Tools
 
-Once connected, your AI assistant gains access to six privacy-scoped tools:
+Once connected, your AI assistant gains access to seven privacy-scoped tools:
 * `list_chats`: Enumerate indexed conversations with JID, name, message count, and last active timestamp.
 * `search_conversations`: Semantic hybrid RAG search (RRF: BM25 + dense vectors) over multi-turn episodes (with optional `chat_id` filter).
 * `search_messages`: Fast BM25 lexical keyword search over individual messages (with optional `chat_id` filter).
 * `get_chat_history`: Retrieve sequential chronological message streams before/after a message ID or latest conversation turns.
 * `get_thread_context`: Reconstruct reply DAGs and episode context around specific message IDs.
 * `stage_reply_draft`: Create tone-matched drafts staged in the local Review Box (no autonomous sending).
+* `sync_chats`: Incrementally synchronize messages received since the last sync date (supports optional `chat_id` or `force_full`).
 
 #### Agent Skills Installation (Claude Code, Antigravity, Cursor)
 

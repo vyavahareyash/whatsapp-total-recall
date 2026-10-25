@@ -193,7 +193,8 @@ whatsapp-total-recall install-skill --force
      - `get_chat_history`: Surrounding chronological message streams.
      - `get_thread_context`: Quote reply DAG attribution.
      - `stage_reply_draft`: Local tone-matched reply staging (never auto-sends).
-   - 💡 **Next Steps:** Suggest the user approve their desired chats via `whatsapp-total-recall vault approve --all` and run `whatsapp-total-recall ingest`.
+     - `sync_chats`: Incremental delta sync of messages received since last sync date.
+   - 💡 **Next Steps:** Suggest the user approve their desired chats via `whatsapp-total-recall vault approve --all`, run initial backfill with `whatsapp-total-recall ingest`, and use `whatsapp-total-recall sync` (or the `sync_chats` tool) for subsequent incremental updates.
 
 ---
 

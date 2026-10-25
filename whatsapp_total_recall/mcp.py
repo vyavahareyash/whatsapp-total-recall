@@ -15,6 +15,7 @@ from typing import Any
 
 from whatsapp_total_recall.config import get_default_db_path
 from whatsapp_total_recall.dag import ReplyDAG
+from whatsapp_total_recall.discovery import discover_whatsapp_containers
 from whatsapp_total_recall.drafter import (
     AutonomousSendingProhibitedError,
     DraftReviewBox,
@@ -256,6 +257,28 @@ class MCPServer:
                     "required": ["chat_id", "intent_points"],
                 },
             },
+            {
+                "name": "sync_chats",
+                "description": (
+                    "Incrementally synchronize WhatsApp messages from local macOS ChatStorage into the search index. "
+                    "Uses the sync_state table to only ingest messages received since the last sync date. "
+                    "Optionally filters to a specific chat_id or performs a full re-sync if force_full is True."
+                ),
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "chat_id": {
+                            "type": "string",
+                            "description": "Optional chat JID to sync strictly for one conversation. If omitted, syncs all approved vault chats.",
+                        },
+                        "force_full": {
+                            "type": "boolean",
+                            "description": "If true, bypasses incremental sync and performs a full backfill re-sync.",
+                            "default": False,
+                        },
+                    },
+                },
+            },
         ]
 
     def verify_token(self, token: str | None) -> bool:
@@ -327,6 +350,10 @@ class MCPServer:
                 if isinstance(intent_points, str):
                     intent_points = [intent_points]
                 return self._tool_stage_reply_draft(chat_id, list(intent_points))
+            elif name == "sync_chats":
+                chat_id = arguments.get("chat_id")
+                force_full = bool(arguments.get("force_full", False))
+                return self._tool_sync_chats(chat_id=chat_id, force_full=force_full)
             else:
                 return {
                     "content": [
@@ -830,6 +857,88 @@ class MCPServer:
             "isError": False,
         }
 
+    def _tool_sync_chats(
+        self,
+        chat_id: str | None = None,
+        force_full: bool = False,
+    ) -> dict[str, Any]:
+        from whatsapp_total_recall.config import get_default_vault_path
+        from whatsapp_total_recall.ingestion import IngestionEngine
+
+        containers = discover_whatsapp_containers()
+        if not containers.has_permission:
+            return {
+                "content": [
+                    {
+                        "type": "text",
+                        "text": json.dumps(
+                            {
+                                "error": "Permission denied accessing WhatsApp container. Full Disk Access is required.",
+                                "status": "failed",
+                            }
+                        ),
+                    }
+                ],
+                "isError": True,
+            }
+        if not containers.chat_storage or not containers.chat_storage.exists():
+            return {
+                "content": [
+                    {
+                        "type": "text",
+                        "text": json.dumps(
+                            {
+                                "error": f"Could not locate ChatStorage.sqlite in {containers.chat_storage}",
+                                "status": "failed",
+                            }
+                        ),
+                    }
+                ],
+                "isError": True,
+            }
+
+        vault_config = self._get_vault_config()
+        if vault_config is None:
+            default_vp = get_default_vault_path()
+            if default_vp.exists():
+                with contextlib.suppress(Exception):
+                    vault_config = VaultConfig.load(default_vp)
+            if vault_config is None:
+                vault_config = VaultConfig()
+
+        if chat_id:
+            vault_config.approve(chat_id)
+
+        engine = IngestionEngine(containers.chat_storage, containers.contacts)
+        with SearchIndex(self.db_path) as index:
+            episodes, report = engine.sync(
+                vault_config=vault_config,
+                index=index,
+                incremental=not force_full,
+                chat_jid=chat_id,
+            )
+            sync_states = index.get_sync_state(chat_id)
+
+        res = {
+            "status": "success",
+            "incremental": not force_full,
+            "chats_ingested": report.ingested_chats_count,
+            "messages_ingested": report.ingested_messages_count,
+            "episodes_generated": report.episodes_generated_count,
+            "revocations_purged": report.revocations_purged_count,
+            "expired_purged": report.expired_purged_count,
+            "sync_state": sync_states,
+        }
+        return {
+            "content": [
+                {
+                    "type": "text",
+                    "text": json.dumps(res, indent=2),
+                }
+            ],
+            "isError": False,
+        }
+
     def handle_message(self, request: dict[str, Any]) -> dict[str, Any] | None:
         """Handle incoming JSON-RPC 2.0 message."""
         if not isinstance(request, dict):
@@ -874,7 +983,7 @@ class MCPServer:
                     "capabilities": {"tools": {}},
                     "serverInfo": {
                         "name": "whatsapp-total-recall-mcp",
-                        "version": "0.2.2",
+                        "version": "0.3.0",
                     },
                 },
             }

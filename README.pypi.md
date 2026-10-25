@@ -184,6 +184,15 @@ whatsapp-total-recall ingest
 whatsapp-total-recall ingest --include-groups
 ```
 
+### 2b. Incrementally Sync Messages
+```bash
+# Incrementally sync new messages received since the last sync date:
+whatsapp-total-recall sync
+
+# Sync a specific conversation only:
+whatsapp-total-recall sync --chat <jid>
+```
+
 ### 3. Search Locally
 ```bash
 whatsapp-total-recall search "project deadline" --k 5
