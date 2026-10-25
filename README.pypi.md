@@ -24,6 +24,16 @@ Installing `whatsapp-total-recall` via `pip`, `pipx`, or `uv` provides:
 
 ---
 
+## 🤖 1-Liner Agent Installation
+
+Paste this single line into your AI assistant or agent chat (Claude Code, Cursor, Windsurf, Antigravity, Roo Code):
+
+```text
+Please read https://raw.githubusercontent.com/vyavahareyash/whatsapp-total-recall/main/AGENT_INSTALL.md and install + configure WhatsApp Total Recall MCP for this environment.
+```
+
+---
+
 ## Prerequisites: Granting macOS Full Disk Access
 
 WhatsApp on macOS stores its SQLite message database in a protected App Group sandbox:
@@ -31,17 +41,28 @@ WhatsApp on macOS stores its SQLite message database in a protected App Group sa
 ~/Library/Group Containers/group.net.whatsapp.WhatsApp.shared/ChatStorage.sqlite
 ```
 
-Because macOS restricts access to group containers by default, you must grant **Full Disk Access**:
+Because macOS restricts access to group containers by default, you must grant **Full Disk Access (FDA)** to any application reading this database:
 
-1. Open macOS **System Settings** > **Privacy & Security** > **Full Disk Access**.
-2. Click the **`+`** icon (or toggle **ON**) for:
-   - Your Terminal app (**Terminal**, **iTerm2**, **Ghostty**, **Warp**).
-   - Your AI desktop client if running MCP stdio (**Claude Desktop**, **Cursor**, **Windsurf**).
-3. **Verify permission via CLI:**
-   ```bash
-   ls -la ~/Library/Group\ Containers/group.net.whatsapp.WhatsApp.shared/ChatStorage.sqlite
-   ```
-   *If the command prints file details, permission is active. If you see `Operation not permitted`, restart your terminal application.*
+### 1. Open macOS Full Disk Access Settings
+Run this shortcut in Terminal to open the settings pane immediately:
+```bash
+open "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles"
+```
+*(Or navigate manually to **System Settings** > **Privacy & Security** > **Full Disk Access**).*
+
+### 2. Enable Permissions
+Toggle **ON** (or click **`+`** to add):
+- **Terminal app** (**Terminal**, **iTerm2**, **Ghostty**, **Warp**) — required for CLI commands and background ingestion jobs.
+- **AI client or IDE** (**Claude Desktop**, **Cursor**, **Windsurf**, **VS Code**) — required when MCP servers are spawned by desktop assistants.
+
+> [!IMPORTANT]
+> **Restart Required:** After toggling Full Disk Access, you **must completely quit and restart** your terminal app or AI desktop client for macOS TCC permission changes to take effect.
+
+### 3. Verify Permission via CLI
+Run this quick diagnostic check:
+```bash
+test -r ~/Library/Group\ Containers/group.net.whatsapp.WhatsApp.shared/ChatStorage.sqlite && echo "✅ Full Disk Access granted" || echo "❌ Access denied - Grant Full Disk Access in macOS Settings"
+```
 
 ---
 
@@ -170,6 +191,15 @@ whatsapp-total-recall search "project deadline" --k 5
 ### 4. Launch Desktop Web UI
 ```bash
 whatsapp-total-recall ui
+```
+
+### 5. Complete Opt-Out & Reset
+```bash
+# Securely wipe index database, configs, skills, and MCP registrations:
+whatsapp-total-recall reset
+
+# Or bypass confirmation prompt:
+whatsapp-total-recall reset --force
 ```
 
 ---
