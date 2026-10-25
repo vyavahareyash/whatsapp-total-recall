@@ -1,330 +1,203 @@
+<p align="center">
+  <img src="assets/banner.jpg" alt="WhatsApp Total Recall Banner" width="100%">
+</p>
+
 # WhatsApp Total Recall
 
-> **A Zero-Cost, Privacy-First Conversational Intelligence Engine for WhatsApp (macOS)**
+> **A Zero-Cost, Privacy-First Conversational Intelligence Engine & MCP Server for WhatsApp (macOS)**
 
-WhatsApp Total Recall is an edge-native conversational intelligence platform designed to synthesize, search, and retrieve information across personal WhatsApp chats, group discussions, and multi-tiered communities on macOS—with **zero cloud costs, zero network packet egress, and zero account ban risk**.
+[![PyPI](https://img.shields.io/pypi/v/whatsapp-total-recall)](https://pypi.org/project/whatsapp-total-recall/)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![Platform: macOS](https://img.shields.io/badge/Platform-macOS_12.0+-000000?logo=apple&logoColor=white)](https://apple.com)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Privacy: 100% Offline](https://img.shields.io/badge/Privacy-100%25_Offline-success)](#strict-local-first-privacy)
+[![Search: Hybrid RRF](https://img.shields.io/badge/Search-BM25_%2B_sqlite--vec-orange)](#zero-cost-local-hybrid-retrieval)
+[![Buy Me A Coffee](https://img.shields.io/badge/Sponsor-Buy%20Me%20a%20Coffee-FFDD00?logo=buy-me-a-coffee&logoColor=black)](https://buymeacoffee.com/vyavahareyash)
+[![GitHub Sponsors](https://img.shields.io/badge/Sponsor-GitHub%20Sponsors-EA4AAA?logo=github)](https://github.com/sponsors/vyavahareyash)
 
----
+WhatsApp Total Recall is an edge-native conversational intelligence engine and Model Context Protocol (MCP) server for macOS. It transforms your local WhatsApp history into an instant, searchable knowledge graph for you and your AI assistants (Claude Desktop, Cursor, Windsurf, Claude Code)—with **zero cloud costs, zero network packet egress, and zero account ban risk**.
 
-## Key Highlights
-
-* **Zero Ban Risk & Zero Pairing Friction:** Passively reads local unencrypted CoreData databases (`ChatStorage.sqlite`) from the macOS WhatsApp Catalyst App Group container. No companion QR pairing, no Puppeteer/Selenium sessions, and no risk of automated anti-bot bans.
-* **Lock-Free Concurrency:** Uses immutable read-only connections (`mode=ro&immutable=1`) and snapshot isolation to prevent SQLite write-lock contention with WhatsApp Desktop's active WAL writer, avoiding OS `0xDEAD10CC` crashes.
-* **Conversational Flow Graph (CFG):** Reconstructs multi-turn reply DAGs (`ZPARENTMESSAGE`), attributes group senders (`ZWAGROUPMEMBER` + `ContactsV2.sqlite`), and chunks fragmented burst chatter into coherent 5–25 message conversational episodes.
-* **Zero-Cost Local Hybrid Search:** Single-file local SQLite storage (`total_recall.db`) combining keyword search (`FTS5` BM25) and dense semantic vector search (`sqlite-vec` SIMD KNN), fused via Reciprocal Rank Fusion (RRF).
-* **Cryptographic Privacy & Epistemic Neutrality:** Mandatory hard purging on message revocation (`PRAGMA secure_delete = ON`), Opt-In Chat Vault perimeters, court-reporter citation ledgers (`[Chat | Date | Sender | msg_id]`), and prefix-level NLI verification (`MiniTruePrefixes`).
-* **Dual Delivery (Single Binary):** Runs as a standalone macOS menu-bar / tray application (Wails / Tauri) while concurrently serving as a local Model Context Protocol (MCP) server for Claude Desktop, Cursor, and local AI agents.
-* **Phase 2 Multimodal Roadmap:** On-device CPU voice note transcription via quantized `faster-whisper` + Silero VAD.
-
----
-
-## Deep Module Architecture
-
-The system is engineered around four deep modules with minimal interfaces and high leverage:
-
-| Module | Interface Surface | Seam & Implementation |
-| :--- | :--- | :--- |
-| **IngestionEngine** | `sync(vaultConfig)`, `watch(vaultConfig)` | Local-substitutable; reads CoreData App Group containers; normalizes Apple Epoch (+978,307,200s); filters 32-bit sentinels; builds reply DAGs. |
-| **SearchIndex** | `index(episodes)`, `search(query, k)`, `purge(msgId)` | Local-substitutable; manages FTS5 virtual tables, `sqlite-vec` SIMD KNN, SQL RRF scoring, and `secure_delete` purges. |
-| **Summarizer** | `summarize(episodes, intentNotes?)` | Real seam (Ollama adapter vs test mock); enforces citation ledgers, sentiment normalization, and prefix-level NLI verification. |
-| **AudioTranscriber** *(Phase 2)* | `transcribe(audioFilePath)` | Real seam (faster-whisper adapter vs test fake); handles Opus decoding, Silero VAD, and quantized speech-to-text. |
+Now published on [PyPI](https://pypi.org/project/whatsapp-total-recall/) and available as a native macOS menu bar app.
 
 ---
 
-## Documentation Navigation
+## Support Development
 
-* **[CONTEXT.md](CONTEXT.md):** Problem space, macOS Catalyst constraints, user personas, and project boundaries.
-* **[GLOSSARY.md](GLOSSARY.md):** Canonical domain language, strict definitions, and `_Avoid_` rules.
-* **[docs/concepts.md](docs/concepts.md):** Deep explanation of core concepts: episodes, reply DAGs, Apple Epoch, sentinels, RRF, and epistemic neutrality.
-* **[docs/architecture.md](docs/architecture.md):** Detailed macOS architecture, deep modules, seams, SQL RRF formulas, and concurrency mechanics.
-* **[docs/spec.md](docs/spec.md):** Comprehensive product specification, 25 user stories, implementation decisions, and test plan.
-* **[docs/adr/0001-macos-app-group-sqlite-ingestion.md](docs/adr/0001-macos-app-group-sqlite-ingestion.md):** Architecture Decision Record establishing macOS Catalyst SQLite snapshot ingestion.
-* **[docs/research/research.md](docs/research/research.md):** Upstream forensic, architectural, benchmark, and protocol analysis from the research paper.
+WhatsApp Total Recall is 100% free, private, and open-source with zero ads, zero trackers, and zero subscriptions. If Total Recall helps you search, synthesize, or connect your chats to your AI workflows, buying a coffee or sponsoring development is greatly appreciated!
 
+<a href="https://buymeacoffee.com/vyavahareyash" target="_blank">
+  <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" height="46">
+</a>
 
 ---
 
-## Prerequisites
+## The Problem
 
-* **Operating System:** macOS 12.0+ (Apple Silicon or Intel).
-* **WhatsApp Desktop:** Official macOS desktop application (Catalyst build) installed and active.
-* **Full Disk Access:** Terminal / Python / IDE granted Full Disk Access in macOS to read WhatsApp's App Group container.
-* **Python Runtime:** Python 3.11+ (if installing via CLI/uv/pip).
-* **Local Inference (Optional):** [Ollama](https://ollama.com/) running locally for vector embeddings (`nomic-embed-text`) and summarization models (`qwen2.5:7b` / `llama3.2:3b`).
+WhatsApp is the primary operating system for modern human communication. Critical business commitments, project specifications, client decisions, recommendations, and family plans are exchanged daily across personal 1:1 threads, sprawling team groups, and multi-tier communities.
 
-### 🤖 1-Liner Agent Installation
-
-Paste this single line into your AI assistant or agent chat (Claude Code, Cursor, Windsurf, Antigravity):
-
-```text
-Please read https://raw.githubusercontent.com/vyavahareyash/whatsapp-total-recall/main/AGENT_INSTALL.md and install + configure WhatsApp Total Recall MCP for this environment.
-```
-
-### Granting macOS Full Disk Access
-
-WhatsApp Catalyst database files are located in `~/Library/Group Containers/group.net.whatsapp.WhatsApp.shared/ChatStorage.sqlite`. macOS requires Full Disk Access to read this container:
-
-1. **Open Settings Pane:** Run in Terminal:
-   ```bash
-   open "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles"
-   ```
-   *(Or open **System Settings** > **Privacy & Security** > **Full Disk Access**).*
-2. **Enable Permissions:** Toggle ON (or click **+** to add):
-   - Your terminal emulator (**Terminal**, **iTerm2**, **Ghostty**, or **Warp**).
-   - Your AI desktop client (**Claude Desktop**, **Cursor**, **Windsurf**, or **VS Code**).
-   - **WhatsAppTotalRecallBar.app** (if running the menu bar app).
-3. **Restart Apps:** Completely quit and restart your terminal or AI client for permission changes to take effect.
-4. **Verify Permission:**
-   ```bash
-   test -r ~/Library/Group\ Containers/group.net.whatsapp.WhatsApp.shared/ChatStorage.sqlite && echo "✅ Full Disk Access granted" || echo "❌ Access denied - Grant Full Disk Access in macOS Settings"
-   ```
-
-### Local Embedding Engine Setup (Ollama)
-
-To enable dense semantic vector search alongside lexical BM25 (`sqlite-vec` RRF hybrid ranking):
-
-```bash
-# 1. Install Ollama (via Homebrew or ollama.com)
-brew install ollama
-
-# 2. Pull the default 768-dim embedding model
-ollama pull nomic-embed-text
-
-# 3. Ensure Ollama service is active
-ollama serve
-```
-
-*(If Ollama is not running, WhatsApp Total Recall operates in high-speed lexical-only mode using SQLite `FTS5` BM25 without interruption).*
+Yet finding information inside WhatsApp is a frustrating, broken experience:
+* **Brittle Keyword Search:** Native search only matches exact literal substrings. Searching for "budget approval" misses "the client agreed to the quote yesterday".
+* **Fragmented Chatter:** Real conversation does not happen in neat paragraphs. People send rapid-fire bursts of 5 to 15 one-line messages over several minutes. Searching returns isolated sentence fragments stripped of their context.
+* **Interleaved Group Chaos:** In high-velocity group chats, multiple separate topics occur at the same time. Quoted replies are separated by dozens of intervening messages, making it nearly impossible to follow the actual debate thread.
+* **The Voice Note Black Hole:** Crucial agreements sent via audio messages are completely unsearchable without manually re-listening to hours of recordings.
+* **Infinite Scroll Fatigue:** Locating a conversation from three months ago requires endless manual scrolling and hunting through dozens of chats.
 
 ---
 
-## Installation
+## Why There Hasn't Been a Solution
 
-### Option 1: Standalone macOS Menu Bar App (Recommended for GUI Users)
+If this problem is so ubiquitous, why hasn't there been an effective tool to solve it?
 
-1. Download the latest `WhatsAppTotalRecall-macos.dmg` from [GitHub Releases](https://github.com/vyavahareyash/whatsapp-total-recall/releases).
-2. Open `WhatsAppTotalRecall-macos.dmg` and drag `WhatsAppTotalRecallBar.app` into `/Applications`.
-3. Launch `WhatsAppTotalRecallBar.app`. An icon appears in your menu bar.
+Existing attempts and native tools fall short due to fundamental privacy and architecture constraints:
 
-### Option 2: Python CLI Installation via `uv` or `pipx`
+1. **The Signal Protocol Walled Garden (No Free User API):**
+   WhatsApp encrypts messages end-to-end (E2EE). Unlike Slack or Discord, Meta provides no open user API, no personal export webhooks, and no free programmatic query endpoints. The official WhatsApp Cloud API is enterprise-only, charges per conversation, requires business verification, and cannot access personal chat archives or personal groups.
+2. **Why Native Meta AI Can't Do This (The E2EE Cloud Dilemma):**
+   While Meta AI is embedded directly inside WhatsApp, it **cannot index, search, or synthesize your past personal or group chats**. WhatsApp's Signal Protocol guarantees that only conversation participants hold decryption keys—Meta's servers cannot read plaintext messages. Because Meta AI runs on centralized cloud data centers, granting it access to your chat history would require decrypting and streaming your entire personal message archive to Meta's cloud, completely breaking WhatsApp's flagship E2EE privacy guarantee. As a result, Meta AI is strictly sandboxed: it can only see prompts explicitly addressed to `@Meta AI`, remaining blind to your actual conversational history.
+3. **Unofficial Web Automation & Account Bans:**
+   Unofficial developer bridges (`whatsmeow`, `Baileys`, Puppeteer/Selenium) work by emulating a WhatsApp Web companion browser session over WebSockets. Meta's anti-scraping heuristics constantly scan for bot-like WebSocket heartbeat patterns, high message fetch velocities, and unlinked browser signatures. Running these bridges frequently results in **permanent phone number bans**.
+4. **The Cloud AI Privacy Hazard:**
+   Uploading your personal WhatsApp database to third-party cloud RAG services or SaaS AI vector databases compromises your most intimate conversations, confidential business contracts, and private contacts.
 
-Install the `whatsapp-total-recall` CLI globally from PyPI:
+---
 
-```bash
-# Using uv (recommended)
-uv tool install "whatsapp-total-recall[vec]"
+## What WhatsApp Total Recall Solves
 
-# Or using pipx
-pipx install "whatsapp-total-recall[vec]"
+WhatsApp Total Recall takes a fundamentally different, zero-network approach:
 
-# Or inside an existing virtual environment
-pip install "whatsapp-total-recall[vec]"
-```
+### 1. Zero Ban Risk & Zero Pairing Friction
+On macOS, WhatsApp Desktop (Catalyst build) stores fully decrypted messages, contacts, and media references locally in an unencrypted CoreData SQLite database inside your user App Group container (`~/Library/Group Containers/group.net.whatsapp.WhatsApp.shared/ChatStorage.sqlite`).
+Total Recall reads this database **passively and locally**. There are no companion QR codes to scan, no WebSockets, no browser automation, and zero network traffic. To Meta's servers, nothing is happening—eliminating any risk of account bans.
 
-> [!NOTE]
-> The `[vec]` extra installs `sqlite-vec>=0.1.6` for local SIMD-accelerated KNN vector search. Omit `[vec]` for a pure standard-library zero-dependency installation (BM25 lexical search only).
-> Both `whatsapp-total-recall` and `total-recall` executable commands are available.
+### 2. Lock-Free Concurrency
+WhatsApp Desktop writes to its database via SQLite Write-Ahead Logging (WAL). Opening this database naively causes lock contention, triggering macOS `0xDEAD10CC` termination crashes. Total Recall uses immutable read-only connections (`mode=ro&immutable=1`) and snapshot isolation, enabling frictionless real-time queries while WhatsApp Desktop is actively receiving messages.
 
-### Option 3: Direct MCP Server Install (for Claude Desktop & Cursor)
+### 3. Conversational Flow Graph (CFG) & Reply DAGs
+Instead of indexing disconnected messages, Total Recall rebuilds conversation dynamics:
+* **Reply DAGs:** Reconnects quoted messages (`ZPARENTMESSAGE`) across time into true conversation trees.
+* **Burst Segmentation:** Uses temporal thresholds ($\Delta t > 15\text{m}$ for groups, $45\text{m}$ for 1:1s) to group fragmented one-liners into coherent 5–25 message **Conversational Episodes**.
+* **Sender Attribution:** Resolves cryptic internal member hashes (`ZWAGROUPMEMBER`) to real human names using macOS address book records (`ContactsV2.sqlite`).
 
-`WhatsAppTotalRecallBar.app` is **not** required to use the MCP server. MCP runs completely headless:
+### 4. Zero-Cost Local Hybrid Retrieval (BM25 + sqlite-vec RRF)
+Indexes content into a single local SQLite file (`total_recall.db`) combining:
+* **Lexical Search (BM25):** SQLite `FTS5` for instant, exact matching of serial numbers, links, emails, and technical terms.
+* **Dense Semantic Vector Search:** Local SIMD-accelerated vector KNN via `sqlite-vec` (768-dim embeddings powered locally by Ollama `nomic-embed-text`).
+* **Reciprocal Rank Fusion (RRF):** Fuses lexical and vector scores in pure SQL without arbitrary score threshold tuning.
+* *Graceful Fallback:* If Ollama is offline, Total Recall automatically runs in high-speed lexical-only mode.
 
-> [!TIP]
-> You only need `uvx` (or the Python CLI) and a one-time message ingestion (`whatsapp-total-recall vault approve --all` followed by `whatsapp-total-recall ingest`). If invoking directly from Claude Desktop / Cursor, grant Full Disk Access to that application.
->
-> **Where does it pull from?**
-> * **PyPI (Standard):** `uvx --from "whatsapp-total-recall[vec]"` downloads from PyPI.
-> * **Direct from GitHub (Pre-release / bleeding-edge):** Replace `"whatsapp-total-recall[vec]"` with `"git+https://github.com/vyavahareyash/whatsapp-total-recall.git"`.
-> * **Local Machine:** Use `"command": "whatsapp-total-recall"` if already installed locally via `uv tool install` or `pipx`.
+### 5. Strict Local-First Privacy
+* **Opt-In Chat Vault:** No conversations are indexed by default. You explicitly approve which contacts or groups to ingest.
+* **Cryptographic Hard Purge:** When a message is revoked ("deleted for everyone"), Total Recall immediately scrubs it from the local index with `PRAGMA secure_delete = ON`.
+* **Localhost-Only:** All daemons and MCP endpoints bind strictly to `127.0.0.1` with bearer-token authentication.
 
-Configure WhatsApp Total Recall directly in your AI client without manual virtualenv management using `uvx`:
+### 6. Dual Delivery: Menu Bar App + Model Context Protocol (MCP) + Agent Skill
+* **Native macOS Menu Bar App:** Quick search bar, status indicators, and one-click vault controls right from your Mac menu bar.
+* **Model Context Protocol (MCP):** Connects your personal WhatsApp memory directly into **Claude Desktop**, **Cursor**, **Windsurf**, and **Claude Code**.
+* **Bundled Agent Skill:** Equips AI assistants with proven reasoning workflows to unknot reply DAGs, expand sequential message streams, and stage tone-matched replies.
 
-#### Claude Desktop
+---
 
-Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
+## Limitations & Project Boundaries
 
-```json
-{
-  "mcpServers": {
-    "whatsapp-total-recall": {
-      "command": "uvx",
-      "args": ["--from", "whatsapp-total-recall[vec]", "whatsapp-total-recall", "mcp"]
-    }
-  }
-}
-```
+Total Recall is transparent about its engineering tradeoffs and current boundaries:
 
-*(Or use `"command": "whatsapp-total-recall"` if already installed globally via `uv tool install`)*
-
-#### Cursor & Windsurf
-
-In Cursor settings (`Settings > Features > MCP`) or `.cursor/mcp.json`:
-
-```json
-{
-  "mcpServers": {
-    "whatsapp-total-recall": {
-      "command": "uvx",
-      "args": ["--from", "whatsapp-total-recall[vec]", "whatsapp-total-recall", "mcp"]
-    }
-  }
-}
-```
-
-#### Claude Code (CLI)
-
-```bash
-claude mcp add whatsapp-total-recall -- uvx --from "whatsapp-total-recall[vec]" whatsapp-total-recall mcp
-```
-
-### Option 4: From Source
-
-```bash
-git clone https://github.com/vyavahareyash/whatsapp-total-recall.git
-cd whatsapp-total-recall
-
-# Install dependencies using uv
-uv sync --extra vec
-
-# Or build the native menu bar DMG installer
-make -C apps/WhatsAppTotalRecallBar dmg
-```
+* **macOS Only (Current Scope):** Ingestion relies on the macOS WhatsApp Catalyst CoreData architecture. Windows (which uses DPAPI-NG encrypted local stores) and Android/iOS (sandboxed/root-restricted) are currently out of scope.
+* **Official WhatsApp Desktop Required:** The official macOS WhatsApp desktop app must be installed and signed in.
+* **Full Disk Access Required:** macOS TCC security requires a one-time grant of Full Disk Access in System Settings for your terminal or AI client to read the sandboxed App Group container.
+* **Passive Read-Only (No Outbound Automated Sending):** Total Recall supports generating tone-matched reply drafts staged in a local Review Box, but **will never autonomously send messages**. You must always approve and send responses manually.
+* **Voice Transcription Slated for Phase 2:** Local CPU voice note transcription (`faster-whisper` + Silero VAD) is part of the Phase 2 roadmap. Phase 1 focuses on text, reply threads, and conversation metadata.
 
 ---
 
 ## Quick Start
 
-### 1. Configure the Opt-In Chat Vault
+### 1-Liner Agent Install
+Paste this into your AI assistant (Claude Code, Cursor, Windsurf, Antigravity):
+```text
+Please read https://raw.githubusercontent.com/vyavahareyash/whatsapp-total-recall/main/AGENT_INSTALL.md and install + configure WhatsApp Total Recall MCP for this environment.
+```
 
-WhatsApp Total Recall enforces a strict privacy perimeter. You can approve all chats at once or pick specific contacts:
-
+### Install via PyPI
 ```bash
-# Quick approve all discovered chats (Recommended for instant MCP use)
+# Install CLI globally with SIMD vector support (recommended)
+uv tool install "whatsapp-total-recall[vec]"
+
+# Or via pipx
+pipx install "whatsapp-total-recall[vec]"
+
+# Or standard pip
+pip install "whatsapp-total-recall[vec]"
+```
+
+### Download Native Mac Menu Bar App
+Download the universal `WhatsAppTotalRecall-macos.dmg` from **[GitHub Releases](https://github.com/vyavahareyash/whatsapp-total-recall/releases/latest)**.
+
+### Basic CLI Workflow
+```bash
+# 1. Approve all chats in privacy vault (or specify contacts)
 whatsapp-total-recall vault approve --all
 
-# Or approve a specific contact or group JID
-whatsapp-total-recall vault approve "123456789@s.whatsapp.net"
-
-# Verify active approved chats
-whatsapp-total-recall vault list-approved
-```
-
-### 2. Ingest Messages
-
-Ingest messages from the local WhatsApp Catalyst storage into the local encrypted SQLite index:
-
-```bash
-# Ingest approved 1:1 chats
-whatsapp-total-recall ingest
-
-# Include approved group chats with reply DAG attribution
+# 2. Ingest messages from local WhatsApp storage
 whatsapp-total-recall ingest --include-groups
 
-# Or bypass vault checks entirely and ingest all chats directly:
-whatsapp-total-recall ingest --all --include-groups
-```
+# 3. Search your conversations with hybrid BM25 + Vector RRF
+whatsapp-total-recall search "contract renewal deadline"
 
-### 2b. Incrementally Sync Messages
-
-After initial ingestion, update your local index with new messages without re-indexing your entire archive:
-
-```bash
-# Incrementally sync new messages across approved chats (using sync_state high-water marks)
-whatsapp-total-recall sync
-
-# Sync a specific conversation only
-whatsapp-total-recall sync --chat <jid>
-
-# Force a full backfill re-sync
-whatsapp-total-recall sync --force
-```
-
-### 3. Search Conversations
-
-Perform hybrid BM25 + vector search fused with Reciprocal Rank Fusion (RRF):
-
-```bash
-whatsapp-total-recall search "contract renewal deadline" --k 5
-```
-
-### 4. Launch Desktop Menu Bar & Local UI
-
-Start the local UI server and native menu bar companion (`http://127.0.0.1:8765`):
-
-```bash
+# 4. Launch local Web UI (http://127.0.0.1:8765)
 whatsapp-total-recall ui
 ```
 
-### 5. Connect as an MCP Server
+> 📖 **Detailed Step-by-Step Guide**: For Full Disk Access setup, Ollama embedding configuration, and Claude Desktop / Cursor MCP JSON integration, see **[INSTALLATION.md](INSTALLATION.md)**.
 
-WhatsApp Total Recall provides a Model Context Protocol (MCP) server for Claude Desktop, Cursor, and local agent orchestrators.
+---
 
-#### Claude Desktop Integration
+## Model Context Protocol (MCP) Tools
 
-Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
+When connected to Claude Desktop, Cursor, or Windsurf, your AI assistant gains 7 privacy-scoped tools:
 
-```json
-{
-  "mcpServers": {
-    "whatsapp-total-recall": {
-      "command": "whatsapp-total-recall",
-      "args": ["mcp"]
-    }
-  }
-}
-```
+| MCP Tool | Description |
+| :--- | :--- |
+| `list_chats` | Enumerate indexed conversations with message counts and activity timestamps. |
+| `search_conversations` | Semantic hybrid RAG search (BM25 + dense vector RRF) over multi-turn episodes. |
+| `search_messages` | Fast lexical BM25 keyword search over individual messages. |
+| `get_chat_history` | Retrieve chronological message streams before/after a specific message ID. |
+| `get_thread_context` | Reconstruct reply DAGs and burst context surrounding a target message. |
+| `stage_reply_draft` | Stage a contextual, tone-matched draft in the local Review Box (no autonomous send). |
+| `sync_chats` | Incrementally synchronize new messages received since the last sync date. |
 
-#### Exposed MCP Tools
+### 🧠 Bundled Agent Exploration Skill
 
-Once connected, your AI assistant gains access to seven privacy-scoped tools:
-* `list_chats`: Enumerate indexed conversations with JID, name, message count, and last active timestamp.
-* `search_conversations`: Semantic hybrid RAG search (RRF: BM25 + dense vectors) over multi-turn episodes (with optional `chat_id` filter).
-* `search_messages`: Fast BM25 lexical keyword search over individual messages (with optional `chat_id` filter).
-* `get_chat_history`: Retrieve sequential chronological message streams before/after a message ID or latest conversation turns.
-* `get_thread_context`: Reconstruct reply DAGs and episode context around specific message IDs.
-* `stage_reply_draft`: Create tone-matched drafts staged in the local Review Box (no autonomous sending).
-* `sync_chats`: Incrementally synchronize messages received since the last sync date (supports optional `chat_id` or `force_full`).
+Total Recall does not just give agents raw API calls—it ships with an autonomous exploration skill ([`skills/whatsapp-total-recall`](skills/whatsapp-total-recall/SKILL.md)) that guides AI coding assistants (Claude Code, Cursor, Windsurf, Antigravity) through specialized conversational reasoning patterns:
 
-#### Agent Skills Installation (Claude Code, Antigravity, Cursor)
+* **Locate → Expand → Resolve:** Instead of halting at isolated keyword snippets, agents identify anchor messages and automatically expand 10–30 turn chronological windows (`get_chat_history`) to capture surrounding context and decisions.
+* **Reply Tree Unknotting:** Deeply traces parent-child quote hierarchies (`get_thread_context`) across hours of intervening group messages.
+* **Cross-Chat Entity Correlation:** Traces commitments made in 1:1 manager chats against broad announcements in team channels with timeline validation.
+* **Tone-Matched Reply Staging:** Drafts contextual replies matching your personal historical tone (`ZISFROMME = 1`) and stages them in the Review Box without autonomous sending.
 
-Install the bundled agent exploration skill across your local agent harnesses:
+Install the skill across all detected agent harnesses with a single command:
 ```bash
+# Auto-detects and installs to Claude Code, Antigravity, and Cursor:
 whatsapp-total-recall install-skill
-```
 
-#### SSE Transport for Web / Network Agents
-
-```bash
-# Starts SSE daemon with bearer bridge-token authentication
-whatsapp-total-recall mcp --transport sse --port 8766
-```
-
-### 6. Complete Opt-Out & Database Reset
-
-```bash
-# Securely purge index database, configs, skills, and MCP registrations:
-whatsapp-total-recall reset
-
-# Bypass confirmation prompt:
-whatsapp-total-recall reset --force
+# Or target a specific harness:
+whatsapp-total-recall install-skill --target claude
 ```
 
 ---
 
-## Release Pipeline
+## Documentation & Architecture
 
-Total Recall includes an automated GitHub Actions release workflow (`.github/workflows/release.yml`):
-
-* **Trigger:** Push a semantic tag (e.g. `git tag v0.1.0 && git push origin v0.1.0`) or run manually via `workflow_dispatch`.
-* **Quality Gate:** Automated linting (`ruff`), format validation, and matrix test execution on Ubuntu & macOS.
-* **Build Outputs:**
-  * Universal macOS DMG installer (`WhatsAppTotalRecall-macos.dmg`) supporting both Apple Silicon (`arm64`) and Intel (`x86_64`).
-  * Python Wheel (`.whl`) and Source Distribution (`.tar.gz`).
-  * Cryptographic checksum ledger (`SHA256SUMS.txt`).
-* **Publishing:** Creates GitHub Releases with changelogs and optionally publishes packages to PyPI via trusted publishing.
+* **[INSTALLATION.md](INSTALLATION.md):** Full Disk Access permissions, Ollama setup, and client configs.
+* **[AGENT_INSTALL.md](AGENT_INSTALL.md):** Autonomous prompt instructions for AI coding agents.
+* **[CONTEXT.md](CONTEXT.md):** Problem space, Catalyst constraints, and system boundaries.
+* **[GLOSSARY.md](GLOSSARY.md):** Canonical domain vocabulary and terminology rules.
+* **[docs/concepts.md](docs/concepts.md):** Deep explanation of episodes, reply DAGs, Apple Epoch, and RRF.
+* **[docs/architecture.md](docs/architecture.md):** Technical design, deep modules, seams, and concurrency mechanics.
+* **[docs/spec.md](docs/spec.md):** Product specification, 25 user stories, and test plan.
+* **[docs/adr/0001-macos-app-group-sqlite-ingestion.md](docs/adr/0001-macos-app-group-sqlite-ingestion.md):** Architecture Decision Record on macOS CoreData ingestion.
 
 ---
 
 ## License
 
-MIT License. See LICENSE for details.
+MIT License. See [LICENSE](LICENSE) for details.
