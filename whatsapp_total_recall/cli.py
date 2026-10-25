@@ -911,6 +911,12 @@ def run_ingest(args: argparse.Namespace) -> int:
     try:
         report = engine.discover_chats(vault_config=vault_config)
         include_groups = bool(args.include_groups)
+        if not include_groups and vault_config:
+            has_approved_groups = any(
+                jid.endswith("@g.us") for jid in vault_config.approved_chat_jids
+            )
+            if has_approved_groups:
+                include_groups = True
         print("Extracting and normalizing messages...")
         messages, stats = engine.extract_messages(
             include_direct=True,

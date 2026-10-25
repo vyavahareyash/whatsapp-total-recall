@@ -739,3 +739,23 @@ def test_cli_vault_approve_all_and_revoke_all(
     assert code_rev == 0
     vault_empty = VaultConfig.load(vault_file)
     assert len(vault_empty.approved_chat_jids) == 0
+
+
+def test_approved_group_auto_ingested_without_include_groups_flag(
+    synthetic_vault_fixture: tuple[Path, Path],
+):
+    """Verify explicitly approved group chats in the vault are ingested even if include_groups=False."""
+    chat_storage, contacts = synthetic_vault_fixture
+    vault = VaultConfig()
+    group_jid = "120363041234567890@g.us"
+    vault.approve(group_jid)
+
+    engine = IngestionEngine(chat_storage, contacts)
+    msgs, stats = engine.extract_messages(
+        include_direct=True,
+        include_groups=False,
+        vault_config=vault,
+    )
+    group_msgs = [m for m in msgs if m.chat_jid == group_jid]
+    assert len(group_msgs) == 2
+    assert stats.group_sessions_ingested == 1

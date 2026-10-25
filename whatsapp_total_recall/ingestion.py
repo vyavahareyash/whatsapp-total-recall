@@ -5,7 +5,7 @@ import sqlite3
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from whatsapp_total_recall.chunking import chunk_into_episodes
 from whatsapp_total_recall.types import (
@@ -269,8 +269,26 @@ class IngestionEngine:
 
         # Construct WHERE clause based on session inclusion
         where_conditions = ["m.ZTEXT IS NOT NULL", "length(m.ZTEXT) > 0"]
+        query_params: list[Any] = []
         if include_direct and not include_groups:
-            where_conditions.append("s.ZCONTACTJID NOT LIKE '%@g.us'")
+            # If vault_config explicitly approved group chats, allow them through
+            approved_groups = (
+                [
+                    jid
+                    for jid in vault_config.approved_chat_jids
+                    if jid.endswith("@g.us")
+                ]
+                if vault_config
+                else []
+            )
+            if approved_groups:
+                placeholders = ",".join("?" for _ in approved_groups)
+                where_conditions.append(
+                    f"(s.ZCONTACTJID NOT LIKE '%@g.us' OR s.ZCONTACTJID IN ({placeholders}))"
+                )
+                query_params.extend(approved_groups)
+            else:
+                where_conditions.append("s.ZCONTACTJID NOT LIKE '%@g.us'")
         elif include_groups and not include_direct:
             where_conditions.append("s.ZCONTACTJID LIKE '%@g.us'")
 
@@ -306,7 +324,7 @@ class IngestionEngine:
             ORDER BY m.ZMESSAGEDATE ASC, m.Z_PK ASC
         """
 
-        cur.execute(query)
+        cur.execute(query, query_params)
 
         messages: list[NormalizedMessage] = []
         ingested_session_jids: set[str] = set()

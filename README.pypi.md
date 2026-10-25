@@ -146,7 +146,8 @@ claude mcp add whatsapp-total-recall -- uvx --from "whatsapp-total-recall[vec]" 
 
 ### Exposed MCP Tools
 * `list_chats`: Enumerate indexed conversations with JID, name, message count, and last active timestamp.
-* `search_messages`: Hybrid lexical + vector search across approved conversations (with optional `chat_id` filter).
+* `search_conversations`: Semantic hybrid RAG search (RRF: BM25 + dense vectors) over multi-turn episodes (with optional `chat_id` filter).
+* `search_messages`: Fast BM25 lexical keyword search across individual messages (with optional `chat_id` filter).
 * `get_chat_history`: Retrieve sequential chronological message streams before/after a message ID or latest conversation turns.
 * `get_thread_context`: Reconstruct multi-turn reply DAGs and conversation branches around specific messages.
 * `stage_reply_draft`: Synthesize tone-matched reply drafts staged in the local Review Box (no autonomous sending).

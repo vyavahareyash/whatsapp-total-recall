@@ -161,6 +161,34 @@ class MCPServer:
                 },
             },
             {
+                "name": "search_conversations",
+                "description": (
+                    "Semantic hybrid search (RRF: BM25 lexical + dense vector embeddings) across multi-turn conversational flow episodes. "
+                    "Returns cohesive dialogue bursts with summaries, intent notes, timestamps, and participants. "
+                    "Use this as the primary semantic RAG tool for conceptual questions, decisions, topics, or plans "
+                    "where exact keywords may not match raw messages."
+                ),
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "query": {
+                            "type": "string",
+                            "description": "Natural language query, topic, or conceptual question to search.",
+                        },
+                        "chat_id": {
+                            "type": "string",
+                            "description": "Optional chat JID to scope semantic search strictly within one conversation.",
+                        },
+                        "limit": {
+                            "type": "integer",
+                            "description": "Maximum number of conversational episodes to return (default: 5, max: 20).",
+                            "default": 5,
+                        },
+                    },
+                    "required": ["query"],
+                },
+            },
+            {
                 "name": "get_chat_history",
                 "description": (
                     "Retrieve a sequential chronological message stream for a specific chat. "
@@ -273,6 +301,11 @@ class MCPServer:
                 chat_id = arguments.get("chat_id")
                 limit = int(arguments.get("limit", 10))
                 return self._tool_search_messages(query, limit, chat_id=chat_id)
+            elif name == "search_conversations":
+                query = str(arguments.get("query", "")).strip()
+                chat_id = arguments.get("chat_id")
+                limit = int(arguments.get("limit", 5))
+                return self._tool_search_conversations(query, limit, chat_id=chat_id)
             elif name == "get_chat_history":
                 if "chat_id" not in arguments:
                     raise ValueError("Argument 'chat_id' is required.")
@@ -418,6 +451,73 @@ class MCPServer:
                     "iso_date": r.iso_date,
                     "text": r.text,
                     "bm25_score": round(r.bm25_score, 4),
+                }
+                for r in results
+            ]
+            return {
+                "content": [
+                    {
+                        "type": "text",
+                        "text": json.dumps(data, indent=2, ensure_ascii=False),
+                    }
+                ],
+                "isError": False,
+            }
+
+    def _tool_search_conversations(
+        self, query: str, limit: int = 5, chat_id: str | None = None
+    ) -> dict[str, Any]:
+        if not query:
+            return {
+                "content": [{"type": "text", "text": json.dumps([])}],
+                "isError": False,
+            }
+        limit = max(1, min(limit, 20))
+        if not self.db_path.exists():
+            return {
+                "content": [
+                    {
+                        "type": "text",
+                        "text": json.dumps(
+                            {"error": f"Database '{self.db_path}' not found."}
+                        ),
+                    }
+                ],
+                "isError": True,
+            }
+
+        with SearchIndex(self.db_path) as index:
+            try:
+                results = index.search_hybrid(query=query, limit=max(limit * 3, 20))
+            except Exception:
+                try:
+                    results = index.search_episodes(
+                        query=query, limit=max(limit * 3, 20)
+                    )
+                except Exception:
+                    results = []
+
+            vault = self._get_vault_config()
+            if vault is not None:
+                results = [
+                    r for r in results if vault.is_chat_approved(r.episode.chat_jid)
+                ]
+            if chat_id:
+                clean_chat = chat_id.strip()
+                results = [r for r in results if r.episode.chat_jid == clean_chat]
+
+            results = results[:limit]
+            data = [
+                {
+                    "episode_id": r.episode.episode_id,
+                    "chat_jid": r.episode.chat_jid,
+                    "chat_name": r.episode.chat_name,
+                    "participants": list(r.episode.participants),
+                    "start_date": r.episode.start_iso,
+                    "end_date": r.episode.end_iso,
+                    "header": r.episode.header,
+                    "rrf_score": round(r.rrf_score, 4),
+                    "dialogue": r.episode.content,
                 }
                 for r in results
             ]
@@ -774,7 +874,7 @@ class MCPServer:
                     "capabilities": {"tools": {}},
                     "serverInfo": {
                         "name": "whatsapp-total-recall-mcp",
-                        "version": "0.2.1",
+                        "version": "0.2.2",
                     },
                 },
             }

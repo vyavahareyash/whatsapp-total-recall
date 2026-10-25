@@ -163,6 +163,7 @@ def test_prohibited_tools_omitted_and_rejected(tmp_path: Path):
     assert set(tool_names) == {
         "list_chats",
         "search_messages",
+        "search_conversations",
         "get_chat_history",
         "get_thread_context",
         "stage_reply_draft",
@@ -320,7 +321,7 @@ def test_stdio_tool_invocations(tmp_path: Path):
 
     # 1. tools/list check
     tools_list = outputs[0]["result"]["tools"]
-    assert len(tools_list) == 5
+    assert len(tools_list) == 6
 
     # 2. search_messages check
     search_res = json.loads(outputs[1]["result"]["content"][0]["text"])
@@ -680,3 +681,48 @@ def test_list_chats_and_chat_history_tools(tmp_path: Path):
     assert search_scoped["isError"] is False
     data_scoped = json.loads(search_scoped["content"][0]["text"])
     assert all(r["chat_jid"] == "direct@s.whatsapp.net" for r in data_scoped)
+
+
+def test_search_conversations_semantic_rag(tmp_path: Path):
+    from whatsapp_total_recall.chunking import chunk_into_episodes
+
+    db_path = tmp_path / "test_episodes.db"
+    seed_test_database(db_path)
+
+    with SearchIndex(db_path) as index:
+        cur = index.con.cursor()
+        cur.execute("SELECT * FROM messages ORDER BY unix_timestamp ASC")
+        raw_rows = cur.fetchall()
+        all_msgs = [
+            NormalizedMessage(
+                pk=int(r["pk"]),
+                chat_session_id=int(r["chat_session_id"]),
+                chat_jid=str(r["chat_jid"]),
+                stanza_id=str(r["stanza_id"]),
+                is_from_me=bool(r["is_from_me"]),
+                sender_name=str(r["sender_name"]),
+                sender_jid=str(r["sender_jid"]),
+                apple_date=float(r["apple_date"]),
+                unix_timestamp=float(r["unix_timestamp"]),
+                iso_date=str(r["iso_date"]),
+                text=str(r["text"]),
+                parent_pk=int(r["parent_pk"]) if r["parent_pk"] is not None else None,
+            )
+            for r in raw_rows
+        ]
+        episodes = chunk_into_episodes(all_msgs)
+        index.index_episodes(episodes)
+
+    server = MCPServer(db_path=db_path, token="test-token")
+    res = server.execute_tool(
+        "search_conversations",
+        {"query": "architectural decision", "limit": 3},
+    )
+    assert res["isError"] is False
+    episodes_data = json.loads(res["content"][0]["text"])
+    assert len(episodes_data) >= 1
+    assert "episode_id" in episodes_data[0]
+    assert "dialogue" in episodes_data[0]
+    assert "rrf_score" in episodes_data[0]
+    assert "participants" in episodes_data[0]
+    assert any("Alice" in p for p in episodes_data[0]["participants"])
