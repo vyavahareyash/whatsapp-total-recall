@@ -188,7 +188,8 @@ whatsapp-total-recall install-skill --force
    - ✅ **Search Mode:** Hybrid RRF (BM25 + `nomic-embed-text`) OR Lexical BM25 (FTS5).
    - ✅ **MCP Tools Registered:**
      - `list_chats`: Enumerate conversations and message statistics.
-     - `search_messages`: Hybrid or lexical message retrieval.
+     - `search_conversations`: Semantic hybrid RAG search over multi-turn episodes.
+     - `search_messages`: Fast BM25 lexical keyword search across individual messages.
      - `get_chat_history`: Surrounding chronological message streams.
      - `get_thread_context`: Quote reply DAG attribution.
      - `stage_reply_draft`: Local tone-matched reply staging (never auto-sends).

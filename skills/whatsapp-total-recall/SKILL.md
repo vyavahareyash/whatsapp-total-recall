@@ -11,19 +11,50 @@ Autonomous AI agent guide for deep exploration across local WhatsApp conversatio
 
 ## 1. Available Tools
 
-The MCP server exposes 5 privacy-preserving local tools:
+The MCP server exposes 6 privacy-preserving local tools:
 
 | Tool | Purpose | Primary Use Case |
 | :--- | :--- | :--- |
 | `list_chats` | Enumerate indexed chats with JID, name, message count, and last activity | Discovery, mapping topology, finding contacts/groups |
-| `search_messages` | BM25 full-text search across messages, with optional `chat_id` filter | Locating anchor messages, keywords, or topics |
+| `search_conversations` | Semantic hybrid RAG search (RRF: BM25 + dense vectors) over episodes | Conceptual questions, multi-turn topics, decisions, plans |
+| `search_messages` | Exact BM25 full-text keyword search across individual messages | Locating exact terms, codes, links, numbers, anchor PKs |
 | `get_chat_history` | Sequential chronological message stream before/after an anchor message | Reading unquoted back-and-forth dialogue & context |
 | `get_thread_context`| Reconstruct parent-child quote reply DAG hierarchy | Unknotting explicit replies, questions, and group debates |
 | `stage_reply_draft` | Synthesize tone-matched response strictly bound to intent bullets | Staging draft in local review box (manual send only) |
 
 ---
 
-## 2. Deep Agentic Exploration Workflow Patterns
+## 2. Query Rewriting & Search Strategy (Crucial for WhatsApp)
+
+WhatsApp conversations are informal, fragmented, and full of abbreviations, slang, and transliteration (e.g., Hinglish / colloquial speech). **Never search raw user questions directly.** Apply these rewriting rules:
+
+### A. Strip Conversational Filler
+* ❌ *Bad*: `search_conversations("can you check what Rahul said about his birthday celebration?")`
+* ✅ *Good*: `search_conversations("Rahul birthday celebration party")`
+
+### B. Dual-Tool Search Selection
+* **Use `search_conversations` (Semantic Hybrid RAG)** when the user asks:
+  - High-level topics or plans (*"what did we decide about the trip?"*, *"budget allocation"*, *"hiring pipeline"*).
+  - Multi-message context where words are spread across back-and-forth replies.
+* **Use `search_messages` (BM25 Keyword)** when searching for:
+  - Exact identifiers, error messages, addresses, tracking numbers, URLs, phone numbers, or specific unique names.
+
+### C. Expand Informal WhatsApp Synonyms & Transliteration
+When querying topics, expand to colloquial terms and contractions commonly used in chats:
+* **Birthdays:** `birthday OR bday OR b'day OR janamdin OR party`
+* **Money & Payments:** `paid OR gpay OR upi OR transfer OR bill OR split OR sent`
+* **Meetings & Calls:** `call OR meet OR sync OR zoom OR gmeet OR connect`
+* **Decisions & Confirmation:** `done OR agreed OR sorted OR pakka OR yes OR ok`
+* **Locations & Logistics:** `reach OR arriving OR omw OR address OR location`
+
+### D. Scope with `chat_id` When Target is Known
+If the user mentions a specific person or group (*"in the Anap family group"* or *"with Pranil"*):
+1. Call `list_chats(query="Anap")` to resolve the exact `chat_jid`.
+2. Supply `chat_id` to `search_conversations` or `search_messages` to eliminate cross-chat noise.
+
+---
+
+## 3. Deep Agentic Exploration Workflow Patterns
 
 When investigating a question, finding a past commitment, or exploring conversation history, avoid relying solely on keyword search snippets. Follow these workflow patterns:
 
@@ -121,7 +152,7 @@ When assisting the user in drafting a reply:
 
 ---
 
-## 3. Invariants & Safety Guardrails
+## 4. Invariants & Safety Guardrails
 
 - **Zero Autonomous Sending**: The server structurally prohibits outgoing network calls to WhatsApp Web/Catalyst. All drafts must be manually approved and pasted by the user.
 - **Zero Presence Snooping**: Presence tracking, typing status, and last-seen spying APIs are omitted.
