@@ -52,16 +52,31 @@ The system is engineered around four deep modules with minimal interfaces and hi
 * **Python Runtime:** Python 3.11+ (if installing via CLI/uv/pip).
 * **Local Inference (Optional):** [Ollama](https://ollama.com/) running locally for vector embeddings (`nomic-embed-text`) and summarization models (`qwen2.5:7b` / `llama3.2:3b`).
 
+### 🤖 1-Liner Agent Installation
+
+Paste this single line into your AI assistant or agent chat (Claude Code, Cursor, Windsurf, Antigravity):
+
+```text
+Please read https://raw.githubusercontent.com/vyavahareyash/whatsapp-total-recall/main/AGENT_INSTALL.md and install + configure WhatsApp Total Recall MCP for this environment.
+```
+
 ### Granting macOS Full Disk Access
 
 WhatsApp Catalyst database files are located in `~/Library/Group Containers/group.net.whatsapp.WhatsApp.shared/ChatStorage.sqlite`. macOS requires Full Disk Access to read this container:
 
-1. Open **System Settings** > **Privacy & Security** > **Full Disk Access**.
-2. Unlock with your password or Touch ID.
-3. Toggle ON (or click **+** to add) your terminal emulator (**Terminal**, **iTerm2**, **Ghostty**, or **Warp**), **WhatsAppTotalRecallBar.app**, and your AI client (e.g. **Claude Desktop**, **Cursor**, **VS Code**).
-4. Verify permission in terminal:
+1. **Open Settings Pane:** Run in Terminal:
    ```bash
-   ls -la ~/Library/Group\ Containers/group.net.whatsapp.WhatsApp.shared/ChatStorage.sqlite
+   open "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles"
+   ```
+   *(Or open **System Settings** > **Privacy & Security** > **Full Disk Access**).*
+2. **Enable Permissions:** Toggle ON (or click **+** to add):
+   - Your terminal emulator (**Terminal**, **iTerm2**, **Ghostty**, or **Warp**).
+   - Your AI desktop client (**Claude Desktop**, **Cursor**, **Windsurf**, or **VS Code**).
+   - **WhatsAppTotalRecallBar.app** (if running the menu bar app).
+3. **Restart Apps:** Completely quit and restart your terminal or AI client for permission changes to take effect.
+4. **Verify Permission:**
+   ```bash
+   test -r ~/Library/Group\ Containers/group.net.whatsapp.WhatsApp.shared/ChatStorage.sqlite && echo "✅ Full Disk Access granted" || echo "❌ Access denied - Grant Full Disk Access in macOS Settings"
    ```
 
 ### Local Embedding Engine Setup (Ollama)
@@ -265,6 +280,16 @@ whatsapp-total-recall install-skill
 ```bash
 # Starts SSE daemon with bearer bridge-token authentication
 whatsapp-total-recall mcp --transport sse --port 8766
+```
+
+### 6. Complete Opt-Out & Database Reset
+
+```bash
+# Securely purge index database, configs, skills, and MCP registrations:
+whatsapp-total-recall reset
+
+# Bypass confirmation prompt:
+whatsapp-total-recall reset --force
 ```
 
 ---

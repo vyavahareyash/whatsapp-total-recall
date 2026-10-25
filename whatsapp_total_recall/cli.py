@@ -1,6 +1,10 @@
 from __future__ import annotations
 
 import argparse
+import json
+import shutil
+import sqlite3
+import subprocess
 import sys
 from pathlib import Path
 
@@ -12,6 +16,7 @@ from whatsapp_total_recall.chunking import (
 from whatsapp_total_recall.config import (
     DEFAULT_CONFIG_PATH,
     AppConfig,
+    get_canonical_storage_dir,
     get_default_db_path,
     get_default_vault_path,
 )
@@ -786,6 +791,37 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         default=False,
         help="Overwrite existing SKILL.md files",
+    )
+
+    # 14. Reset / Opt-Out subcommand
+    reset_parser = subparsers.add_parser(
+        "reset",
+        help="Complete opt-out: securely purge local database, configs, tokens, skills, and MCP registrations",
+    )
+    reset_parser.add_argument(
+        "--force",
+        "-f",
+        action="store_true",
+        default=False,
+        help="Bypass interactive confirmation prompt",
+    )
+    reset_parser.add_argument(
+        "--keep-db",
+        action="store_true",
+        default=False,
+        help="Retain the SQLite index database file and only remove configs, skills, and MCP registrations",
+    )
+    reset_parser.add_argument(
+        "--db",
+        type=Path,
+        default=None,
+        help="Specific database path to purge (defaults to discovered database)",
+    )
+    reset_parser.add_argument(
+        "--vault",
+        type=Path,
+        default=None,
+        help="Specific vault config path to delete (defaults to discovered vault)",
     )
 
     return parser
@@ -2010,6 +2046,139 @@ def run_install_skill(args: argparse.Namespace) -> int:
     return 0
 
 
+def run_reset(args: argparse.Namespace) -> int:
+    if not getattr(args, "force", False):
+        try:
+            choice = input(
+                "Warning: This will irreversibly purge WhatsApp Total Recall databases, "
+                "configurations, tokens, skills, and MCP registrations.\n"
+                "Are you sure you want to proceed? [y/N]: "
+            )
+            if choice.strip().lower() not in {"y", "yes"}:
+                print("Opt-out reset cancelled.")
+                return 0
+        except (EOFError, KeyboardInterrupt):
+            print("\nOpt-out reset cancelled.")
+            return 0
+
+    purged_items: list[str] = []
+
+    # 1. Database and local data files
+    if not getattr(args, "keep_db", False):
+        db_candidates: list[Path] = []
+        if getattr(args, "db", None):
+            db_candidates.append(Path(args.db))
+        else:
+            default_db = get_default_db_path()
+            db_candidates.extend(
+                [
+                    default_db,
+                    Path("whatsapp_total_recall.db"),
+                    Path("total_recall.db"),
+                ]
+            )
+
+        seen_dbs: set[Path] = set()
+        for db_file in db_candidates:
+            resolved = db_file.resolve()
+            if resolved in seen_dbs or not db_file.exists():
+                continue
+            seen_dbs.add(resolved)
+            try:
+                with sqlite3.connect(db_file) as conn:
+                    conn.execute("PRAGMA secure_delete = ON;")
+                    cursor = conn.cursor()
+                    cursor.execute(
+                        "SELECT name, type FROM sqlite_master WHERE type IN ('table', 'view', 'index');"
+                    )
+                    for name, item_type in cursor.fetchall():
+                        if item_type == "table" and not name.startswith("sqlite_"):
+                            cursor.execute(f'DROP TABLE IF EXISTS "{name}";')
+                    conn.commit()
+                    conn.execute("VACUUM;")
+            except Exception:
+                pass
+            for suffix in ["", "-wal", "-shm"]:
+                p = Path(str(db_file) + suffix)
+                if p.exists():
+                    p.unlink(missing_ok=True)
+            purged_items.append(f"Database: {db_file}")
+
+        # Wipe canonical directory ~/.whatsapp-total-recall
+        storage_dir = get_canonical_storage_dir()
+        if storage_dir.exists():
+            shutil.rmtree(storage_dir, ignore_errors=True)
+            purged_items.append(f"Directory: {storage_dir}")
+
+        # Wipe local runtime config / token in CWD
+        for local_name in ["vault_config.json", ".bridge-token", "config.json"]:
+            lp = Path(local_name)
+            if lp.exists():
+                lp.unlink(missing_ok=True)
+                purged_items.append(f"Config/Token: {lp}")
+
+    # 2. Prune agent skills
+    skill_dirs = [
+        Path.home() / ".claude" / "skills" / "whatsapp-total-recall",
+        Path.home() / ".gemini" / "config" / "skills" / "whatsapp-total-recall",
+        Path.cwd() / ".cursor" / "skills" / "whatsapp-total-recall",
+        Path.home() / ".cursor" / "skills" / "whatsapp-total-recall",
+    ]
+    for sdir in skill_dirs:
+        if sdir.exists():
+            shutil.rmtree(sdir, ignore_errors=True)
+            purged_items.append(f"Skill: {sdir}")
+
+    # 3. Prune MCP client config JSON files
+    mcp_config_files = [
+        Path.home()
+        / "Library"
+        / "Application Support"
+        / "Claude"
+        / "claude_desktop_config.json",
+        Path.home() / ".cursor" / "mcp.json",
+        Path.cwd() / ".cursor" / "mcp.json",
+        Path.home() / ".codeium" / "windsurf" / "mcp_config.json",
+    ]
+    for cfg_file in mcp_config_files:
+        if cfg_file.exists():
+            try:
+                data = json.loads(cfg_file.read_text(encoding="utf-8"))
+                if isinstance(data, dict) and "mcpServers" in data:
+                    servers = data["mcpServers"]
+                    if "whatsapp-total-recall" in servers:
+                        del servers["whatsapp-total-recall"]
+                        cfg_file.write_text(
+                            json.dumps(data, indent=2), encoding="utf-8"
+                        )
+                        purged_items.append(f"MCP Config pruned: {cfg_file}")
+            except Exception:
+                pass
+
+    # 4. Remove Claude Code CLI MCP registration
+    if shutil.which("claude"):
+        try:
+            subprocess.run(
+                ["claude", "mcp", "remove", "whatsapp-total-recall"],
+                capture_output=True,
+                check=False,
+            )
+            purged_items.append("Claude CLI MCP: whatsapp-total-recall removed")
+        except Exception:
+            pass
+
+    print("WhatsApp Total Recall Reset Complete.")
+    if purged_items:
+        print(f"Purged {len(purged_items)} item(s):")
+        for item in purged_items:
+            print(f"  - {item}")
+    else:
+        print(
+            "No active installations, databases, or MCP registrations found to purge."
+        )
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -2051,6 +2220,8 @@ def main(argv: list[str] | None = None) -> int:
         return run_ui(args)
     if args.command == "install-skill":
         return run_install_skill(args)
+    if args.command == "reset":
+        return run_reset(args)
     return 0
 
 
