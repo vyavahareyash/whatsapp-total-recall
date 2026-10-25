@@ -167,6 +167,7 @@ def test_prohibited_tools_omitted_and_rejected(tmp_path: Path):
         "get_chat_history",
         "get_thread_context",
         "stage_reply_draft",
+        "sync_chats",
     }
 
     # Autonomous send and presence tracking methods must be stripped and rejected
@@ -321,7 +322,7 @@ def test_stdio_tool_invocations(tmp_path: Path):
 
     # 1. tools/list check
     tools_list = outputs[0]["result"]["tools"]
-    assert len(tools_list) == 6
+    assert len(tools_list) == 7
 
     # 2. search_messages check
     search_res = json.loads(outputs[1]["result"]["content"][0]["text"])

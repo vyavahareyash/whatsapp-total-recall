@@ -8,6 +8,7 @@ import struct
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 from whatsapp_total_recall.chunking import rebuild_episode_without_message
 from whatsapp_total_recall.embeddings import EmbeddingProvider, get_embedding_provider
@@ -167,6 +168,15 @@ class SearchIndex:
                 header,
                 content,
                 tokenize = 'porter unicode61'
+            );
+
+            CREATE TABLE IF NOT EXISTS sync_state (
+                chat_jid TEXT PRIMARY KEY,
+                last_message_pk INTEGER NOT NULL,
+                last_apple_date REAL NOT NULL,
+                last_unix_timestamp REAL NOT NULL,
+                last_synced_at REAL NOT NULL,
+                total_messages_synced INTEGER DEFAULT 0
             );
 
             CREATE INDEX IF NOT EXISTS idx_messages_expires_at ON messages(expires_at) WHERE expires_at IS NOT NULL;
@@ -395,6 +405,62 @@ class SearchIndex:
 
         self.con.commit()
         return len(episodes)
+
+    def get_sync_state(self, chat_jid: str | None = None) -> dict[str, Any] | None:
+        """Retrieve sync state record(s). If chat_jid is provided, returns single record dict or None."""
+        cur = self.con.cursor()
+        if chat_jid is not None:
+            cur.execute(
+                """
+                SELECT chat_jid, last_message_pk, last_apple_date, last_unix_timestamp, last_synced_at, total_messages_synced
+                FROM sync_state WHERE chat_jid = ?
+                """,
+                (chat_jid,),
+            )
+            row = cur.fetchone()
+            return dict(row) if row else None
+
+        cur.execute(
+            """
+            SELECT chat_jid, last_message_pk, last_apple_date, last_unix_timestamp, last_synced_at, total_messages_synced
+            FROM sync_state
+            """
+        )
+        return {row["chat_jid"]: dict(row) for row in cur.fetchall()}
+
+    def update_sync_state(
+        self,
+        chat_jid: str,
+        last_message_pk: int,
+        last_apple_date: float,
+        last_unix_timestamp: float,
+        synced_count: int = 0,
+    ) -> None:
+        """Upsert sync state for a chat."""
+        cur = self.con.cursor()
+        now_ts = datetime.now(UTC).timestamp()
+        cur.execute(
+            """
+            INSERT INTO sync_state (
+                chat_jid, last_message_pk, last_apple_date, last_unix_timestamp, last_synced_at, total_messages_synced
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(chat_jid) DO UPDATE SET
+                last_message_pk = excluded.last_message_pk,
+                last_apple_date = excluded.last_apple_date,
+                last_unix_timestamp = excluded.last_unix_timestamp,
+                last_synced_at = excluded.last_synced_at,
+                total_messages_synced = sync_state.total_messages_synced + excluded.total_messages_synced
+            """,
+            (
+                chat_jid,
+                last_message_pk,
+                last_apple_date,
+                last_unix_timestamp,
+                now_ts,
+                synced_count,
+            ),
+        )
+        self.con.commit()
 
     @staticmethod
     def sanitize_fts_query(query: str) -> str:

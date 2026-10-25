@@ -143,6 +143,85 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Inactivity gap threshold for 1:1 direct chats in minutes (default: 45.0)",
     )
+    ingest_parser.add_argument(
+        "--incremental",
+        action="store_true",
+        default=False,
+        help="Perform incremental ingestion using sync_state high-water marks",
+    )
+
+    # 1b. Sync subcommand
+    sync_parser = subparsers.add_parser(
+        "sync",
+        help="Incrementally synchronize WhatsApp messages into the local index",
+    )
+    sync_parser.add_argument(
+        "--source",
+        type=Path,
+        default=None,
+        help="Path to ChatStorage.sqlite (defaults to discovered macOS path)",
+    )
+    sync_parser.add_argument(
+        "--contacts",
+        type=Path,
+        default=None,
+        help="Path to ContactsV2.sqlite (defaults to discovered macOS path)",
+    )
+    sync_parser.add_argument(
+        "--db",
+        type=Path,
+        default=DEFAULT_DB_PATH,
+        help="Target SQLite database for indexed messages (default: total_recall.db)",
+    )
+    sync_parser.add_argument(
+        "--chat",
+        type=str,
+        default=None,
+        help="Sync specific chat JID only",
+    )
+    sync_parser.add_argument(
+        "--vault",
+        type=Path,
+        default=None,
+        help="Path to Opt-In Chat Vault config JSON",
+    )
+    sync_parser.add_argument(
+        "--force",
+        action="store_true",
+        default=False,
+        help="Bypass incremental sync and force full re-sync",
+    )
+    sync_parser.add_argument(
+        "--embedder",
+        choices=["auto", "ollama", "mock"],
+        default="auto",
+        help="Local embedding provider to use (default: auto)",
+    )
+    sync_parser.add_argument(
+        "--model",
+        type=str,
+        default="nomic-embed-text",
+        help="Embedding model name (default: nomic-embed-text)",
+    )
+    sync_parser.add_argument(
+        "--host",
+        "--ollama-host",
+        type=str,
+        default=None,
+        help="Ollama daemon HTTP host (default: http://127.0.0.1:11434)",
+    )
+    sync_parser.add_argument(
+        "--group-gap",
+        type=float,
+        default=None,
+        help="Inactivity gap threshold for group chats in minutes (default: 15.0)",
+    )
+    sync_parser.add_argument(
+        "--direct-gap",
+        type=float,
+        default=None,
+        help="Inactivity gap threshold for 1:1 direct chats in minutes (default: 45.0)",
+    )
 
     # 2. Search subcommand
     search_parser = subparsers.add_parser(
@@ -917,11 +996,24 @@ def run_ingest(args: argparse.Namespace) -> int:
             )
             if has_approved_groups:
                 include_groups = True
+
+        since_apple_dates: dict[str, float] | None = None
+        if getattr(args, "incremental", False) and args.db.exists():
+            with SearchIndex(args.db) as temp_idx:
+                sync_states = temp_idx.get_sync_state()
+                if isinstance(sync_states, dict):
+                    since_apple_dates = {
+                        jid: float(rec["last_apple_date"])
+                        for jid, rec in sync_states.items()
+                        if "last_apple_date" in rec
+                    }
+
         print("Extracting and normalizing messages...")
         messages, stats = engine.extract_messages(
             include_direct=True,
             include_groups=include_groups,
             vault_config=vault_config,
+            since_apple_dates=since_apple_dates,
         )
     except Exception as exc:
         print(f"Error extracting messages: {exc}", file=sys.stderr)
@@ -998,6 +1090,19 @@ def run_ingest(args: argparse.Namespace) -> int:
                     cur, tot, prefix="Indexing messages"
                 ),
             )
+            chat_msg_map: dict[str, list[NormalizedMessage]] = {}
+            for m in messages:
+                chat_msg_map.setdefault(m.chat_jid, []).append(m)
+
+            for jid, msgs in chat_msg_map.items():
+                last_m = max(msgs, key=lambda m: (m.apple_date, m.pk))
+                index.update_sync_state(
+                    chat_jid=jid,
+                    last_message_pk=last_m.pk,
+                    last_apple_date=last_m.apple_date,
+                    last_unix_timestamp=last_m.unix_timestamp,
+                    synced_count=len(msgs),
+                )
         if episodes:
             print(f"Computing embeddings & indexing {len(episodes)} episode(s)...")
             indexed_episodes = index.index_episodes(
@@ -1023,6 +1128,84 @@ def run_ingest(args: argparse.Namespace) -> int:
     if vault_config is not None:
         print("\n" + report.format_report())
 
+    return 0
+
+
+def run_sync(args: argparse.Namespace) -> int:
+    source_path = args.source
+    contacts_path = args.contacts
+
+    if not source_path:
+        containers = discover_whatsapp_containers()
+        if not containers.has_permission:
+            print(
+                "Error: Permission denied accessing WhatsApp container. Full Disk Access is required.",
+                file=sys.stderr,
+            )
+            return 1
+        if not containers.chat_storage or not containers.chat_storage.exists():
+            print(
+                "Error: Could not locate ChatStorage.sqlite. Specify --source explicitly.",
+                file=sys.stderr,
+            )
+            return 1
+        source_path = containers.chat_storage
+        contacts_path = containers.contacts
+
+    if not source_path.exists():
+        print(f"Error: ChatStorage file not found: {source_path}", file=sys.stderr)
+        return 1
+
+    vault_config: VaultConfig | None = None
+    if getattr(args, "vault", None):
+        vault_config = VaultConfig.load(args.vault)
+    elif DEFAULT_VAULT_PATH.exists():
+        vault_config = VaultConfig.load(DEFAULT_VAULT_PATH)
+    else:
+        vault_config = VaultConfig()
+
+    target_chat = getattr(args, "chat", None)
+    if target_chat:
+        vault_config.approve(target_chat)
+
+    embedder_name = getattr(args, "embedder", "auto")
+    host = _resolve_host(args, vault_config)
+    embedder = get_embedding_provider(
+        name=embedder_name,
+        model=getattr(args, "model", "nomic-embed-text"),
+        host=host,
+    )
+
+    grp_gap = (
+        args.group_gap * 60.0 if getattr(args, "group_gap", None) is not None else None
+    )
+    dir_gap = (
+        args.direct_gap * 60.0
+        if getattr(args, "direct_gap", None) is not None
+        else None
+    )
+
+    engine = IngestionEngine(source_path, contacts_path)
+    with SearchIndex(args.db, embedder=embedder) as index:
+        episodes, report = engine.sync(
+            vault_config=vault_config,
+            index=index,
+            embedder=embedder,
+            group_gap_seconds=grp_gap,
+            direct_gap_seconds=dir_gap,
+            incremental=not getattr(args, "force", False),
+            chat_jid=target_chat,
+        )
+
+    mode_label = "Full backfill" if getattr(args, "force", False) else "Incremental"
+    print(f"{mode_label} sync complete into '{args.db}':")
+    print(f"  Chats synced: {report.ingested_chats_count}")
+    print(f"  Messages ingested: {report.ingested_messages_count}")
+    print(f"  Episodes generated: {report.episodes_generated_count}")
+    if report.revocations_purged_count > 0:
+        print(f"  Revocations purged: {report.revocations_purged_count}")
+    if report.expired_purged_count > 0:
+        print(f"  Expired messages purged: {report.expired_purged_count}")
     return 0
 
 
@@ -2204,6 +2387,8 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "ingest":
         return run_ingest(args)
+    if args.command == "sync":
+        return run_sync(args)
     if args.command == "search":
         return run_search(args)
     if args.command == "thread":

@@ -11,7 +11,7 @@ Autonomous AI agent guide for deep exploration across local WhatsApp conversatio
 
 ## 1. Available Tools
 
-The MCP server exposes 6 privacy-preserving local tools:
+The MCP server exposes 7 privacy-preserving local tools:
 
 | Tool | Purpose | Primary Use Case |
 | :--- | :--- | :--- |
@@ -21,6 +21,7 @@ The MCP server exposes 6 privacy-preserving local tools:
 | `get_chat_history` | Sequential chronological message stream before/after an anchor message | Reading unquoted back-and-forth dialogue & context |
 | `get_thread_context`| Reconstruct parent-child quote reply DAG hierarchy | Unknotting explicit replies, questions, and group debates |
 | `stage_reply_draft` | Synthesize tone-matched response strictly bound to intent bullets | Staging draft in local review box (manual send only) |
+| `sync_chats` | Incrementally synchronize messages received since last sync date | Refreshing search store on-demand before querying recent chats |
 
 ---
 
@@ -149,6 +150,25 @@ When assisting the user in drafting a reply:
    ```
 4. **Instruct the User**:
    Report `draft_text` and `tone_profile` to the user and prompt them to copy it to their WhatsApp clipboard.
+
+---
+
+### Pattern D: On-Demand Delta Sync (`sync_chats`)
+
+When the user asks about recent activity (*"what did Rahul send just now?"*, *"check my latest messages"*, or *"sync my chats"*):
+
+1. **Trigger Incremental Sync (`sync_chats`)**:
+   ```json
+   {
+     "name": "sync_chats",
+     "arguments": {
+       "chat_id": "rahul@s.whatsapp.net"
+     }
+   }
+   ```
+   *Tip*: Omit `chat_id` to sync across all approved vault chats. Set `force_full: true` only if rebuilding or backfilling.
+2. **Inspect Fresh Dialogue**:
+   Proceed with `get_chat_history` or `search_conversations` over the updated index.
 
 ---
 
