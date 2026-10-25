@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "whatsapp-total-recall"
-version = "0.3.0"
+version = "0.3.1"
 description = "A Zero-Cost, Privacy-First Conversational Intelligence Engine for WhatsApp (macOS)"
 readme = "README.pypi.md"
 requires-python = ">=3.11"

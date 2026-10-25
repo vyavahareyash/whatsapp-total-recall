@@ -1185,6 +1185,10 @@ def run_sync(args: argparse.Namespace) -> int:
         else None
     )
 
+    mode_label = "Full backfill" if getattr(args, "force", False) else "Incremental"
+    print(f"Reading WhatsApp database: {source_path}")
+    print(f"Opening index store '{args.db}' ({mode_label.lower()} sync)...")
+
     engine = IngestionEngine(source_path, contacts_path)
     with SearchIndex(args.db, embedder=embedder) as index:
         episodes, report = engine.sync(
@@ -1195,9 +1199,11 @@ def run_sync(args: argparse.Namespace) -> int:
             direct_gap_seconds=dir_gap,
             incremental=not getattr(args, "force", False),
             chat_jid=target_chat,
+            progress_callback=lambda stage, cur, tot: _render_progress_bar(
+                cur, tot, prefix=stage
+            ),
         )
 
-    mode_label = "Full backfill" if getattr(args, "force", False) else "Incremental"
     print(f"{mode_label} sync complete into '{args.db}':")
     print(f"  Chats synced: {report.ingested_chats_count}")
     print(f"  Messages ingested: {report.ingested_messages_count}")
@@ -1206,6 +1212,10 @@ def run_sync(args: argparse.Namespace) -> int:
         print(f"  Revocations purged: {report.revocations_purged_count}")
     if report.expired_purged_count > 0:
         print(f"  Expired messages purged: {report.expired_purged_count}")
+
+    if vault_config is not None and report.ingested_chats_count > 0:
+        print("\n" + report.format_report())
+
     return 0
 
 

@@ -247,3 +247,72 @@ def test_cli_sync_subcommand(synthetic_sync_db: tuple[Path, Path], tmp_path: Pat
             state = index.get_sync_state("14155550101@s.whatsapp.net")
             assert state is not None
             assert state["last_message_pk"] == 2
+
+
+def test_cli_ingest_populates_sync_state(
+    synthetic_sync_db: tuple[Path, Path], tmp_path: Path
+):
+    chat_storage, contacts = synthetic_sync_db
+    index_db = tmp_path / "ingest_sync_test.db"
+
+    mock_containers = WhatsAppContainers(
+        group_dir=None,
+        chat_storage=chat_storage,
+        contacts=contacts,
+        has_permission=True,
+    )
+
+    with patch(
+        "whatsapp_total_recall.cli.discover_whatsapp_containers",
+        return_value=mock_containers,
+    ):
+        code = cli_main(
+            [
+                "ingest",
+                "--source",
+                str(chat_storage),
+                "--contacts",
+                str(contacts),
+                "--db",
+                str(index_db),
+                "--approve",
+                "14155550101@s.whatsapp.net",
+                "--embedder",
+                "mock",
+            ]
+        )
+        assert code == 0
+
+        with SearchIndex(index_db) as index:
+            state = index.get_sync_state("14155550101@s.whatsapp.net")
+            assert state is not None
+            assert state["last_message_pk"] == 2
+            assert state["last_apple_date"] == 725000060.0
+            assert state["total_messages_synced"] == 2
+
+
+def test_sync_progress_callback_stages(
+    synthetic_sync_db: tuple[Path, Path], tmp_path: Path
+):
+    chat_storage, contacts = synthetic_sync_db
+    index_db = tmp_path / "cb_test.db"
+    vault = VaultConfig()
+    vault.approve("14155550101@s.whatsapp.net")
+
+    engine = IngestionEngine(chat_storage, contacts)
+    stages_seen: list[str] = []
+
+    def on_progress(stage: str, cur: int, tot: int) -> None:
+        if stage not in stages_seen:
+            stages_seen.append(stage)
+
+    with SearchIndex(index_db) as index:
+        engine.sync(
+            vault_config=vault,
+            index=index,
+            incremental=True,
+            progress_callback=on_progress,
+        )
+
+    assert "Indexing messages" in stages_seen
+    assert "Embedding & indexing episodes" in stages_seen
