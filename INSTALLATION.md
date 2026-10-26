@@ -109,7 +109,27 @@ pip install "whatsapp-total-recall[vec]"
 
 ---
 
-### Method C: Headless Model Context Protocol (MCP) Setup
+### Method D: Claude Code Plugin (All-in-One CLI Workflow)
+
+For Claude Code users, install the plugin to automatically register the MCP server, `/whatsapp-search`, `/whatsapp-sync`, pre-flight FDA checks, and agent reasoning skills:
+
+```bash
+# 1. Direct install from GitHub
+claude plugin install github:vyavahareyash/whatsapp-total-recall
+
+# Or add as a marketplace source
+claude plugin marketplace add vyavahareyash/whatsapp-total-recall
+claude plugin install whatsapp-total-recall
+```
+
+To verify the installation:
+```bash
+claude plugin list
+```
+
+---
+
+### Method E: Manual Headless Model Context Protocol (MCP) Setup
 
 `WhatsAppTotalRecallBar.app` is **not** required to use the MCP server. MCP runs completely headless:
 

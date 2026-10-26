@@ -132,10 +132,14 @@ whatsapp-total-recall --help
 Detect the target client and show the exact config changes:
 
 #### Option A: Claude Code (CLI)
-Ask: *"Add `whatsapp-total-recall` to Claude Code CLI MCP list?"*
+Ask: *"Install `whatsapp-total-recall` as a Claude Code plugin (bundles MCP + skills + commands)?"*
 If approved:
 ```bash
-claude mcp add whatsapp-total-recall -- uvx --from "whatsapp-total-recall[vec]" whatsapp-total-recall mcp
+# Recommended: All-in-one plugin install
+claude plugin install github:vyavahareyash/whatsapp-total-recall
+
+# Or manual standalone MCP addition:
+# claude mcp add whatsapp-total-recall -- uvx --from "whatsapp-total-recall[vec]" whatsapp-total-recall mcp
 ```
 
 #### Option B: Claude Desktop

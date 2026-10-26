@@ -1,0 +1,21 @@
+{
+  "name": "whatsapp-total-recall",
+  "version": "0.3.2",
+  "description": "Zero-cost, privacy-first conversational intelligence engine & local MCP server for WhatsApp on macOS",
+  "author": {
+    "name": "Yash Vyavahare",
+    "url": "https://github.com/vyavahareyash"
+  },
+  "homepage": "https://github.com/vyavahareyash/whatsapp-total-recall",
+  "repository": "https://github.com/vyavahareyash/whatsapp-total-recall",
+  "license": "MIT",
+  "keywords": [
+    "whatsapp",
+    "mcp",
+    "search",
+    "rag",
+    "privacy",
+    "macos",
+    "local-first"
+  ]
+}

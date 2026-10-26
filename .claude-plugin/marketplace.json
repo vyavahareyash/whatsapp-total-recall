@@ -1,0 +1,14 @@
+{
+  "name": "whatsapp-total-recall-marketplace",
+  "description": "Marketplace catalog for WhatsApp Total Recall and related privacy-first tools",
+  "owner": {
+    "name": "Yash Vyavahare"
+  },
+  "plugins": [
+    {
+      "name": "whatsapp-total-recall",
+      "source": "./",
+      "description": "Privacy-first WhatsApp conversational intelligence & MCP server for macOS"
+    }
+  ]
+}
