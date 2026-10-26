@@ -111,8 +111,19 @@ Total Recall is transparent about its engineering tradeoffs and current boundari
 
 ## Quick Start
 
+### 1-Liner Claude Code Plugin Install
+If you are using Claude Code, install the all-in-one plugin (MCP server, skills, pre-flight checks, slash commands):
+```bash
+# Direct install (zero setup, auto-configures MCP server + skills + commands):
+claude plugin install github:vyavahareyash/whatsapp-total-recall
+
+# Or add as a marketplace source:
+claude plugin marketplace add vyavahareyash/whatsapp-total-recall
+claude plugin install whatsapp-total-recall
+```
+
 ### 1-Liner Agent Install
-Paste this into your AI assistant (Claude Code, Cursor, Windsurf, Antigravity):
+Paste this into your AI assistant (Cursor, Windsurf, Antigravity, Claude Desktop):
 ```text
 Please read https://raw.githubusercontent.com/vyavahareyash/whatsapp-total-recall/main/AGENT_INSTALL.md and install + configure WhatsApp Total Recall MCP for this environment.
 ```
