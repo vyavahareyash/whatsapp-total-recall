@@ -19,6 +19,16 @@ WhatsApp Total Recall is an edge-native conversational intelligence engine and M
 
 Now published on [PyPI](https://pypi.org/project/whatsapp-total-recall/) and available as a native macOS menu bar app.
 
+<p align="center">
+  <b><a href="#quick-start">🚀 Quick Start</a></b> •
+  <b><a href="#1-liner-claude-code-plugin-install">🧩 Claude Plugin</a></b> •
+  <b><a href="#install-via-pypi">📦 Installation</a></b> •
+  <b><a href="#model-context-protocol-mcp-tools">🛠️ MCP Tools</a></b> •
+  <b><a href="#what-whatsapp-total-recall-solves">💡 Features</a></b> •
+  <b><a href="#limitations--project-boundaries">⚠️ Limitations</a></b> •
+  <b><a href="#documentation--architecture">📚 Architecture</a></b>
+</p>
+
 ---
 
 ## Support Development
